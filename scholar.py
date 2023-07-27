@@ -1,7 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-import csv
-from datetime import date
 import os
 import pickle
 import time
