@@ -98,47 +98,63 @@ def get_last_added_file(folder_path):
 # Call the crawl_google_scholar function to retrieve the citation information
 current_results = crawl_google_scholar()
 
+def get_root_path():
+    return os.path.dirname(os.path.abspath(__file__))
+
+def create_folder(folder_path):
+    """
+    check whether `folder_path` exists.
+    If not, create the folder
+    """
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
 # Read the previous citation counts
-history_folder = "/Users/dongwookim/Workspace/scholar/history/"
-diff_folder = "/Users/dongwookim/Workspace/scholar/difference/"
+root_path = get_root_path()
+history_folder = os.path.join(root_path, "history/")
+diff_folder = os.path.join(root_path, "difference/")
+create_folder(history_folder)
+create_folder(diff_folder)
+
 previous_file = get_last_added_file(history_folder)
-previous_counts = read_previous_counts(history_folder+previous_file)
+if previous_file is not None:
+    previous_counts = read_previous_counts(history_folder+previous_file)
 
-now = datetime.now()
+    now = datetime.now()
 
-current_time = now.strftime("%H:%M:%S")
+    current_time = now.strftime("%H:%M:%S")
 
-print("[", current_time, "] read previous file from", previous_file)
+    print("[", current_time, "] read previous file from", previous_file)
 
-# Create a dictionary to store the current citation counts
-current_counts = {}
-today_sum = 0
+    # Create a dictionary to store the current citation counts
+    current_counts = {}
+    today_sum = 0
 
-# Compare the previous and current results to check for changes
-for title in current_results:
-    previous_citations = previous_counts.get(title, 0)
-    current_citations = int(current_results[title])
-    today_sum += current_citations
-    
-    # Check if there is an increase in the citation count
-    if current_citations != previous_citations:
-        print(f"Paper: {title}")
-        print(f"Previous Citations: {previous_citations}")
-        print(f"Current Citations: {current_citations}")
-        print("-----------------------------")
-    
-        # Store the current citation count
-        current_counts[title] = current_citations - previous_citations
+    # Compare the previous and current results to check for changes
+    for title in current_results:
+        previous_citations = previous_counts.get(title, 0)
+        current_citations = int(current_results[title])
+        today_sum += current_citations
+        
+        # Check if there is an increase in the citation count
+        if current_citations != previous_citations:
+            print(f"Paper: {title}")
+            print(f"Previous Citations: {previous_citations}")
+            print(f"Current Citations: {current_citations}")
+            print("-----------------------------")
+        
+            # Store the current citation count
+            current_counts[title] = current_citations - previous_citations
 
-# Write the increasement to a file
-if len(current_counts) > 0:
-    today = time.strftime("%Y%m%d.csv")
-    print("save difference at", today)
-    write_to_csv(current_counts, diff_folder + today)
+    # Write the increasement to a file
+    if len(current_counts) > 0:
+        today = time.strftime("%Y%m%d%H%M.csv")
+        print("save difference at", today)
+        write_to_csv(current_counts, diff_folder + today)
 
-print("[", current_time, "] Today's total citation: ", today_sum)
+    print("[", current_time, "] Today's total citation: ", today_sum)
 
 # Write the total citation to the pkl file
-today_total = time.strftime("%Y%m%d.pkl")
+today_total = time.strftime("%Y%m%d%H%M.pkl")
 write_to_pkl(current_results, history_folder + today_total)
 
