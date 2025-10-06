@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.scholar-citation-tracker</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/dongwookim/miniconda3/bin/python3</string>
+        <string>/Users/dongwookim/Workspace/scholar_counter/app.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/dongwookim/Workspace/scholar_counter</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/dongwookim/Workspace/scholar_counter/logs/scholar-tracker.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dongwookim/Workspace/scholar_counter/logs/scholar-tracker-error.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>
