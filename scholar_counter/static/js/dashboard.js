@@ -10,9 +10,15 @@
     const el = (id) => document.getElementById(id);
     const charts = new Map();
 
+    const GRANULARITIES = ['daily', 'monthly', 'yearly'];
+    const CHANGE_HEADING = { daily: 'Change per day', monthly: 'Change per month', yearly: 'Change per year' };
+
     let papers = [];
     let sortKey = 'citations';
     let filterText = '';
+    let granularity = GRANULARITIES.includes(localStorage.getItem('sc-granularity'))
+        ? localStorage.getItem('sc-granularity')
+        : 'daily';
 
     // ---------- helpers ----------
 
@@ -106,7 +112,8 @@
                     borderWidth: 2,
                     fill: true,
                     tension: 0.35,
-                    pointRadius: 0,
+                    // Sparse series (monthly, yearly) need visible markers.
+                    pointRadius: points.length <= 24 ? 3 : 0,
                     pointHoverRadius: 5,
                 }],
             },
@@ -131,6 +138,8 @@
                     data: points.map((p) => p.change),
                     backgroundColor: points.map((p) => (p.change >= 0 ? colors.success : colors.danger)),
                     borderRadius: 3,
+                    // Without a cap, a two-bar yearly view renders as slabs.
+                    maxBarThickness: 56,
                 }],
             },
             options: {
@@ -331,13 +340,24 @@
     }
 
     async function loadTrends() {
+        setText('changes-heading', CHANGE_HEADING[granularity]);
         try {
-            const data = await getJSON('/api/trends');
+            const data = await getJSON(`/api/trends?granularity=${granularity}`);
             lineChart('trends-chart', data.overall_trend, 'Total citations');
-            changesChart(data.daily_trend);
+            changesChart(data.change_trend);
         } catch {
             /* charts stay empty; the summary tile already reports the problem */
         }
+    }
+
+    function setGranularity(next) {
+        granularity = next;
+        localStorage.setItem('sc-granularity', next);
+        document.querySelectorAll('[data-granularity]').forEach((button) => {
+            button.classList.toggle('active', button.dataset.granularity === next);
+            button.setAttribute('aria-pressed', String(button.dataset.granularity === next));
+        });
+        loadTrends();
     }
 
     async function loadPapers() {
@@ -461,6 +481,10 @@
             renderPapersTable();
         });
 
+        document.querySelectorAll('[data-granularity]').forEach((button) => {
+            button.addEventListener('click', () => setGranularity(button.dataset.granularity));
+        });
+
         document.querySelectorAll('[data-sort]').forEach((button) => {
             button.addEventListener('click', () => {
                 sortKey = button.dataset.sort;
@@ -471,7 +495,7 @@
         });
 
         loadSummary();
-        loadTrends();
+        setGranularity(granularity); // marks the active button and loads the charts
         loadPapers();
         loadStatus();
         setInterval(loadStatus, STATUS_POLL_MS);

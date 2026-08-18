@@ -116,7 +116,7 @@ Run `start_scholar_tracker.bat`, or point Task Scheduler at it with an
 | --- | --- |
 | `GET /` | Dashboard |
 | `GET /api/summary` | Totals, recent change, top papers |
-| `GET /api/trends` | Total-citation series and per-snapshot change |
+| `GET /api/trends?granularity=…` | Total-citation series and change, bucketed |
 | `GET /api/papers` | Every paper with its trend |
 | `GET /api/paper?title=…` | One paper's detail |
 | `GET /api/analytics` | Aggregate metrics |
@@ -127,6 +127,20 @@ Run `start_scholar_tracker.bat`, or point Task Scheduler at it with an
 
 Endpoints return `404` with an `{"error": …}` body when no data has been
 collected yet, and `POST /api/update` returns `503` when a scrape fails.
+
+## Chart granularity
+
+The trend chart groups snapshots into calendar buckets: `daily`, `monthly`, or
+`yearly`. Because scrapes are irregular, each bucket is represented by its
+*last* snapshot, and the change shown is the movement since the previous
+bucket. A bucket with no snapshots is absent rather than zero, so a gap is
+visible instead of being drawn as a flat stretch.
+
+The dashboard remembers the selected view. To query directly:
+
+```bash
+curl 'http://127.0.0.1:8080/api/trends?granularity=monthly'
+```
 
 ## Storage
 
@@ -165,7 +179,7 @@ Two things changed in the process, both of which fix real bugs:
 ## Development
 
 ```bash
-pytest        # 68 tests, no network access
+pytest        # 80 tests, no network access
 ruff check .
 ruff format .
 ```

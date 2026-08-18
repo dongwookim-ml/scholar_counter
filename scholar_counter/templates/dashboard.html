@@ -84,7 +84,14 @@
         <div class="row g-3 mb-4">
             <div class="col-lg-8">
                 <div class="card h-100">
-                    <div class="card-header"><i class="fas fa-chart-area text-primary me-2"></i>Citation trend</div>
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <span><i class="fas fa-chart-area text-primary me-2"></i>Citation trend</span>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Chart granularity">
+                            <button type="button" class="btn btn-outline-secondary" data-granularity="daily">Daily</button>
+                            <button type="button" class="btn btn-outline-secondary" data-granularity="monthly">Monthly</button>
+                            <button type="button" class="btn btn-outline-secondary" data-granularity="yearly">Yearly</button>
+                        </div>
+                    </div>
                     <div class="card-body">
                         <div class="chart-box chart-lg"><canvas id="trends-chart"></canvas></div>
                     </div>
@@ -102,7 +109,9 @@
         <div class="row g-3 mb-4">
             <div class="col-12">
                 <div class="card">
-                    <div class="card-header"><i class="fas fa-calendar-day text-info me-2"></i>Change between snapshots</div>
+                    <div class="card-header">
+                        <i class="fas fa-calendar-day text-info me-2"></i><span id="changes-heading">Change per day</span>
+                    </div>
                     <div class="card-body">
                         <div class="chart-box chart-sm"><canvas id="changes-chart"></canvas></div>
                     </div>

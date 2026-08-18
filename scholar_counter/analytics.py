@@ -53,19 +53,22 @@ def summary(conn: sqlite3.Connection) -> dict[str, Any] | None:
     }
 
 
-def trends(conn: sqlite3.Connection) -> dict[str, Any]:
+def trends(conn: sqlite3.Connection, granularity: str = "daily") -> dict[str, Any]:
+    """Citation totals and movement, collapsed to calendar buckets."""
     from . import db
 
-    overall = [
-        {"timestamp": _date(row["captured_at"]), "total_citations": row["total"]}
-        for row in db.totals_series(conn)
-    ]
-    daily = [
-        {"timestamp": _date(row["captured_at"]), "change": row["change"]}
-        for row in db.change_series(conn)
-        if row["change"]
-    ]
-    return {"overall_trend": overall, "daily_trend": daily}
+    rows = db.bucketed_totals(conn, granularity)
+    return {
+        "granularity": granularity,
+        "overall_trend": [
+            {"timestamp": row["bucket"], "total_citations": row["total"], "papers": row["papers"]}
+            for row in rows
+        ],
+        # The first bucket has no predecessor, and flat buckets are not worth a bar.
+        "change_trend": [
+            {"timestamp": row["bucket"], "change": row["change"]} for row in rows if row["change"]
+        ],
+    }
 
 
 def papers(conn: sqlite3.Connection) -> list[dict[str, Any]]:

@@ -124,6 +124,54 @@ def change_series(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+# strftime patterns that collapse snapshots into calendar buckets.
+GRANULARITIES = {
+    "daily": "%Y-%m-%d",
+    "monthly": "%Y-%m",
+    "yearly": "%Y",
+}
+
+
+def bucketed_totals(conn: sqlite3.Connection, granularity: str) -> list[sqlite3.Row]:
+    """Totals collapsed to one point per calendar bucket, oldest first.
+
+    Snapshots are irregular, so each bucket is represented by its *last*
+    snapshot and the change is the movement since the previous bucket.
+    """
+    try:
+        fmt = GRANULARITIES[granularity]
+    except KeyError:
+        raise ValueError(
+            f"Unknown granularity {granularity!r}; expected one of {sorted(GRANULARITIES)}"
+        ) from None
+
+    return conn.execute(
+        _TOTALS_CTE
+        + """
+        , ranked AS (
+            SELECT strftime(:fmt, captured_at) AS bucket,
+                   captured_at,
+                   total,
+                   papers,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY strftime(:fmt, captured_at)
+                       ORDER BY captured_at DESC
+                   ) AS rank_in_bucket
+            FROM totals
+        )
+        SELECT bucket,
+               captured_at,
+               total,
+               papers,
+               total - LAG(total) OVER (ORDER BY bucket) AS change
+        FROM ranked
+        WHERE rank_in_bucket = 1
+        ORDER BY bucket
+        """,
+        {"fmt": fmt},
+    ).fetchall()
+
+
 def paper_trend(conn: sqlite3.Connection, title: str) -> list[sqlite3.Row]:
     """Citation history for one paper, oldest first."""
     return conn.execute(

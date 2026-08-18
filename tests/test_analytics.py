@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from scholar_counter import analytics, db
 
 
@@ -39,7 +41,7 @@ def test_trends_skips_flat_intervals(conn):
 
     trends = analytics.trends(conn)
     assert len(trends["overall_trend"]) == 3
-    assert [point["change"] for point in trends["daily_trend"]] == [4]
+    assert [point["change"] for point in trends["change_trend"]] == [4]
 
 
 def test_papers_sorted_by_citations_with_recent_change(seeded):
@@ -76,3 +78,67 @@ def test_overview_metrics(seeded):
 
 def test_overview_on_empty_database(conn):
     assert analytics.overview(conn) is None
+
+
+def test_trends_default_granularity_is_daily(seeded):
+    assert analytics.trends(seeded)["granularity"] == "daily"
+
+
+def test_daily_granularity_collapses_same_day_snapshots(conn):
+    """Two scrapes on one day are one point, taking the later total."""
+    db.save_snapshot(conn, datetime(2025, 1, 1, 9, 0), {"Alpha": 5})
+    db.save_snapshot(conn, datetime(2025, 1, 1, 18, 0), {"Alpha": 8})
+    db.save_snapshot(conn, datetime(2025, 1, 2, 9, 0), {"Alpha": 11})
+
+    points = analytics.trends(conn, "daily")["overall_trend"]
+
+    assert [p["timestamp"] for p in points] == ["2025-01-01", "2025-01-02"]
+    assert [p["total_citations"] for p in points] == [8, 11]
+
+
+def test_monthly_granularity_uses_the_last_snapshot_of_each_month(conn):
+    db.save_snapshot(conn, datetime(2025, 1, 3), {"Alpha": 5})
+    db.save_snapshot(conn, datetime(2025, 1, 28), {"Alpha": 9})
+    db.save_snapshot(conn, datetime(2025, 2, 14), {"Alpha": 20})
+
+    result = analytics.trends(conn, "monthly")
+
+    assert [p["timestamp"] for p in result["overall_trend"]] == ["2025-01", "2025-02"]
+    assert [p["total_citations"] for p in result["overall_trend"]] == [9, 20]
+    assert result["change_trend"] == [{"timestamp": "2025-02", "change": 11}]
+
+
+def test_yearly_granularity(conn):
+    db.save_snapshot(conn, datetime(2024, 6, 1), {"Alpha": 10})
+    db.save_snapshot(conn, datetime(2024, 12, 31), {"Alpha": 40})
+    db.save_snapshot(conn, datetime(2025, 7, 1), {"Alpha": 100})
+
+    result = analytics.trends(conn, "yearly")
+
+    assert [p["timestamp"] for p in result["overall_trend"]] == ["2024", "2025"]
+    assert [p["total_citations"] for p in result["overall_trend"]] == [40, 100]
+    assert result["change_trend"] == [{"timestamp": "2025", "change": 60}]
+
+
+def test_coarser_buckets_never_lose_the_final_total(seeded):
+    """Whatever the bucket size, the newest point must match the latest total."""
+    latest = analytics.summary(seeded)["current_total"]
+    for granularity in ("daily", "monthly", "yearly"):
+        points = analytics.trends(seeded, granularity)["overall_trend"]
+        assert points[-1]["total_citations"] == latest
+
+
+def test_change_across_a_gap_is_attributed_to_the_later_bucket(conn):
+    """A month with no snapshots is absent, not zero."""
+    db.save_snapshot(conn, datetime(2025, 1, 15), {"Alpha": 10})
+    db.save_snapshot(conn, datetime(2025, 4, 15), {"Alpha": 30})
+
+    result = analytics.trends(conn, "monthly")
+
+    assert [p["timestamp"] for p in result["overall_trend"]] == ["2025-01", "2025-04"]
+    assert result["change_trend"] == [{"timestamp": "2025-04", "change": 20}]
+
+
+def test_unknown_granularity_is_rejected(seeded):
+    with pytest.raises(ValueError, match="Unknown granularity"):
+        analytics.trends(seeded, "hourly")

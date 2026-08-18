@@ -55,8 +55,15 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool = True
 
     @app.get("/api/trends")
     def api_trends():
+        granularity = request.args.get("granularity", "daily")
+        if granularity not in db.GRANULARITIES:
+            return {
+                "error": f"Unknown granularity {granularity!r}.",
+                "allowed": sorted(db.GRANULARITIES),
+            }, 400
+
         with connection() as conn:
-            return jsonify(analytics.trends(conn))
+            return jsonify(analytics.trends(conn, granularity))
 
     @app.get("/api/papers")
     def api_papers():

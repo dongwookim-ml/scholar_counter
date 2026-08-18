@@ -129,3 +129,20 @@ def test_update_endpoint_stores_a_snapshot(client, settings, monkeypatch):
     assert body["total_citations"] == 7
     with db.session(settings.database) as conn:
         assert db.latest_counts(conn) == {"Alpha": 3, "Beta": 4}
+
+
+@pytest.mark.parametrize("granularity", ["daily", "monthly", "yearly"])
+def test_trends_accepts_each_granularity(populated, granularity):
+    body = populated.get("/api/trends", query_string={"granularity": granularity}).get_json()
+    assert body["granularity"] == granularity
+    assert body["overall_trend"]
+
+
+def test_trends_defaults_to_daily(populated):
+    assert populated.get("/api/trends").get_json()["granularity"] == "daily"
+
+
+def test_trends_rejects_unknown_granularity(populated):
+    response = populated.get("/api/trends", query_string={"granularity": "hourly"})
+    assert response.status_code == 400
+    assert response.get_json()["allowed"] == ["daily", "monthly", "yearly"]
