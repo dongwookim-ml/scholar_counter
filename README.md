@@ -1,173 +1,174 @@
-# Scholar Citation Tracker Web Application
+# Scholar Citation Tracker
 
-A comprehensive web application for tracking and visualizing Google Scholar citation metrics with beautiful dashboards and analytics.
+Tracks the citation counts on a Google Scholar profile over time and serves a
+dashboard of the history: totals, per-paper trends, and change between snapshots.
 
-## Features
+Data is refreshed automatically once a day. The dashboard reads from a local
+SQLite database, so it stays fast as the history grows.
 
-### 📊 **Dashboard Overview**
-- **Real-time Statistics**: Total citations, daily/weekly changes, paper count
-- **Interactive Charts**: Citation trends over time with smooth animations
-- **Top Papers**: Quick view of most cited publications
-- **Daily Changes**: Bar chart showing daily citation increases
-- **Live Data Updates**: One-click update from Google Scholar with real-time status
+## Install
 
-### 📈 **Advanced Analytics**
-- **Growth Metrics**: Total growth, average daily growth, best/worst days
-- **Paper Statistics**: Most/least cited papers, average citations per paper
-- **Recent Activity**: 30-day growth tracking
-- **Trend Analysis**: Individual paper citation trends
+```bash
+pip install -e ".[dev]"
+```
 
-### 📋 **Paper Management**
-- **Comprehensive Table**: All papers with current citations and recent changes
-- **Sorting Options**: By citations, recent change, or title
-- **Individual Details**: Click any paper for detailed trend analysis
-- **Mini Trend Charts**: Visual trend indicators in the table
+Python 3.11 or newer. The only runtime dependencies are Flask, requests, and
+BeautifulSoup.
 
-### 📤 **Data Export**
-- **CSV Export**: Download complete citation data
-- **Papers Export**: Export individual paper trends
-- **Analytics Export**: Advanced metrics and statistics
+## Run
 
-### 🔄 **Integrated Data Management**
-- **Google Scholar Integration**: Direct scraping and data collection
-- **Automatic Updates**: One-click refresh from Google Scholar
-- **Real-time Status**: Live update indicators and notifications
-- **Data Synchronization**: Automatic comparison with previous data
-- **Change Detection**: Only saves when citations actually change
+```bash
+scholar-counter serve
+```
 
-### 🎨 **Visualization Features**
-- **Interactive Charts**: Built with Chart.js for smooth interactions
-- **Responsive Design**: Works on desktop, tablet, and mobile
-- **Modern UI**: Bootstrap 5 with custom styling
-- **Real-time Updates**: Auto-refresh every 5 minutes
+Then open <http://127.0.0.1:8080>. Other commands:
 
-## Installation
+| Command | Purpose |
+| --- | --- |
+| `scholar-counter serve` | Run the dashboard (default command) |
+| `scholar-counter update` | Fetch the profile once and store a snapshot |
+| `scholar-counter status` | Print what is currently stored |
+| `scholar-counter migrate` | Import legacy `history/*.pkl` files |
 
-1. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+Every command also works as `python -m scholar_counter.cli <command>`.
 
-2. **Run the Application**:
-   ```bash
-   python app.py
-   ```
+## Automatic updates
 
-3. **Access the Dashboard**:
-   Open your browser and go to `http://localhost:8080`
+`serve` starts a background thread that scrapes the profile once a day at
+`SCHOLAR_UPDATE_HOUR` (03:00 by default). Two details make this reliable on a
+laptop rather than a server:
 
-## Data Structure
+- **Catch-up on start.** If the newest snapshot is older than
+  `SCHOLAR_STALE_AFTER_HOURS`, an update runs immediately. A machine that was
+  asleep at 03:00 refreshes when it wakes instead of waiting another day.
+- **One update at a time.** The scheduled run and the *Update now* button share
+  a lock, so they can never scrape concurrently.
+- **Back off, don't skip.** Google Scholar rate-limits automated clients
+  routinely, answering `429` with a bot-check page. A failed run retries after
+  `SCHOLAR_RETRY_AFTER_MINUTES` rather than waiting for the next daily slot.
+  Failed scrapes never write a snapshot, so the history has no bogus points.
 
-The application reads data from two directories:
-- `history/`: Contains timestamped pickle files with complete citation snapshots
-- `difference/`: Contains CSV files with daily citation changes
+The dashboard header shows when the next automatic update is due.
 
-## API Endpoints
+To drive updates from cron or launchd instead, set `SCHOLAR_AUTO_UPDATE=0` and
+schedule `scholar-counter update`.
 
-- `GET /` - Main dashboard
-- `GET /api/summary` - Summary statistics
-- `GET /api/trends` - Citation trend data
-- `GET /api/papers` - All papers data
-- `GET /api/paper/<title>` - Individual paper details
-- `GET /api/export/csv` - Export citation data as CSV
-- `GET /api/export/papers` - Export papers data as CSV
-- `GET /api/analytics` - Advanced analytics
-- `POST /api/update` - Update data from Google Scholar
-- `GET /api/status` - Get current data status
+## Configuration
 
-## Cool Visualization Methods
+All settings come from the environment; there is no config file to edit.
 
-### 1. **Smooth Line Charts**
-- Citation trends with tension curves for natural flow
-- Interactive tooltips showing exact values
-- Color-coded positive/negative changes
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SCHOLAR_USER_ID` | `RkspD6IAAAAJ` | Google Scholar profile id |
+| `SCHOLAR_HOST` | `127.0.0.1` | Bind address |
+| `SCHOLAR_PORT` | `8080` | Port |
+| `SCHOLAR_DEBUG` | `0` | Flask debug mode |
+| `SCHOLAR_DATABASE` | `./scholar.db` | SQLite file |
+| `SCHOLAR_AUTO_UPDATE` | `1` | Enable the daily scheduler |
+| `SCHOLAR_UPDATE_HOUR` | `3` | Hour of the daily update (0–23, local time) |
+| `SCHOLAR_UPDATE_MINUTE` | `0` | Minute of the daily update |
+| `SCHOLAR_STALE_AFTER_HOURS` | `24` | Age at which startup triggers a catch-up |
+| `SCHOLAR_RETRY_AFTER_MINUTES` | `60` | Delay before retrying a failed update |
+| `SCHOLAR_TIMEOUT` | `30` | HTTP timeout in seconds |
+| `SCHOLAR_USER_AGENT` | Chrome UA | Request user agent |
 
-### 2. **Mini Trend Charts**
-- Inline trend visualization in the papers table
-- Quick visual assessment of paper performance
-- Responsive design that scales with screen size
+`SCHOLAR_HOST` defaults to localhost deliberately. The app has no
+authentication and its update endpoint triggers outbound scraping, so bind it
+to `0.0.0.0` only on a trusted network, and never together with
+`SCHOLAR_DEBUG=1` — that combination exposes the Werkzeug debugger.
 
-### 3. **Animated Number Changes**
-- Numbers animate when values change
-- Visual feedback for data updates
-- Smooth transitions for better UX
+## Running at login
 
-### 4. **Color-Coded Metrics**
-- Green for positive changes
-- Red for negative changes
-- Blue for neutral/stable values
-- Consistent color scheme throughout
+### macOS (launchd)
 
-### 5. **Interactive Modals**
-- Detailed paper analysis with full trend charts
-- Advanced analytics with comprehensive metrics
-- Smooth modal transitions and animations
+```bash
+cp com.scholar-citation-tracker.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.scholar-citation-tracker.plist
+```
 
-### 6. **Responsive Cards**
-- Hover effects with elevation changes
-- Gradient headers for visual appeal
-- Consistent spacing and typography
+The plist in this repository is generated for this checkout's paths and Python
+interpreter. Edit those strings if either changes. To apply a code change:
 
-## Suggested Additional Functionalities
+```bash
+launchctl unload ~/Library/LaunchAgents/com.scholar-citation-tracker.plist
+launchctl load ~/Library/LaunchAgents/com.scholar-citation-tracker.plist
+```
 
-### 🔮 **Future Enhancements**
+Logs land in `logs/scholar-tracker.log` and `logs/scholar-tracker-error.log`.
 
-1. **Prediction Models**
-   - Machine learning-based citation prediction
-   - Trend forecasting with confidence intervals
-   - Growth rate projections
+### Linux (systemd)
 
-2. **Comparative Analysis**
-   - Compare with other researchers
-   - Benchmark against field averages
-   - Relative performance metrics
+Edit the paths and username in `scholar-citation-tracker.service`, then:
 
-3. **Advanced Filtering**
-   - Filter papers by research area
-   - Date range selection
-   - Citation threshold filters
+```bash
+sudo cp scholar-citation-tracker.service /etc/systemd/system/
+sudo systemctl enable --now scholar-citation-tracker
+```
 
-4. **Social Features**
-   - Share achievements on social media
-   - Generate citation reports
-   - Export to academic profiles
+### Windows
 
-5. **Real-time Notifications**
-   - Email alerts for significant changes
-   - Webhook integrations
-   - Mobile push notifications
+Run `start_scholar_tracker.bat`, or point Task Scheduler at it with an
+"at log on" trigger.
 
-6. **Data Visualization Enhancements**
-   - Heat maps for citation patterns
-   - Network graphs for co-authorship
-   - Geographic citation maps
+## API
 
-7. **Advanced Analytics**
-   - H-index calculations
-   - Impact factor analysis
-   - Research area clustering
+| Endpoint | Returns |
+| --- | --- |
+| `GET /` | Dashboard |
+| `GET /api/summary` | Totals, recent change, top papers |
+| `GET /api/trends` | Total-citation series and per-snapshot change |
+| `GET /api/papers` | Every paper with its trend |
+| `GET /api/paper?title=…` | One paper's detail |
+| `GET /api/analytics` | Aggregate metrics |
+| `GET /api/status` | Snapshot count, last update, next scheduled update |
+| `GET /api/export/citations.csv` | History as CSV |
+| `GET /api/export/papers.csv` | Per-paper history as CSV |
+| `POST /api/update` | Scrape now |
 
-8. **Integration Features**
-   - ORCID integration
-   - Google Scholar API (when available)
-   - ResearchGate synchronization
+Endpoints return `404` with an `{"error": …}` body when no data has been
+collected yet, and `POST /api/update` returns `503` when a scrape fails.
 
-## Technical Stack
+## Storage
 
-- **Backend**: Flask (Python)
-- **Frontend**: HTML5, CSS3, JavaScript (ES6+)
-- **Charts**: Chart.js
-- **UI Framework**: Bootstrap 5
-- **Icons**: Font Awesome 6
-- **Data Storage**: CSV files and Pickle files
+Everything lives in `scholar.db`:
 
-## Browser Support
+```sql
+snapshot(id, captured_at)
+citation(snapshot_id, title, citations)
+```
 
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
+Change between snapshots is derived in SQL rather than stored, so it cannot
+drift from the totals.
 
-## License
+### Migrating from the pickle layout
 
-This project is open source and available under the MIT License.
+Earlier versions wrote one pickle per snapshot into `history/` and one CSV of
+changes into `difference/`. To import them:
+
+```bash
+scholar-counter migrate
+```
+
+`migrate` only reads those folders, so they remain a backup. It is idempotent,
+keyed on each file's timestamp, so re-running it will not duplicate snapshots.
+
+Two things changed in the process, both of which fix real bugs:
+
+- **Change is now computed from totals.** The old CSVs summed per-paper
+  increases among papers *currently* on the profile. When Scholar merged or
+  dropped an entry, those citations vanished from the total but not from the
+  reported growth. On 2026-05-18 the old code reported `+80` while the total
+  actually moved `+46`, because a 34-citation entry had been merged away.
+- **Titles containing commas survive.** The old CSVs were written with a bare
+  `"%s, %s"` format, so any comma in a title corrupted the row.
+
+## Development
+
+```bash
+pytest        # 68 tests, no network access
+ruff check .
+ruff format .
+```
+
+`.claude/launch.json` defines a dev server on port 8090 with auto-update off,
+so it can run alongside an installed service on 8080.

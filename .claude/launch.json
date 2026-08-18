@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "scholar-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "SCHOLAR_PORT=8090 SCHOLAR_AUTO_UPDATE=0 PYTHONPATH=. python3 -m scholar_counter.cli serve"
+      ],
+      "port": 8090
+    }
+  ]
+}

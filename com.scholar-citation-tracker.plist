@@ -7,7 +7,9 @@
     <key>ProgramArguments</key>
     <array>
         <string>/Users/dongwookim/miniconda3/bin/python3</string>
-        <string>/Users/dongwookim/Workspace/scholar_counter/app.py</string>
+        <string>-m</string>
+        <string>scholar_counter.cli</string>
+        <string>serve</string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/dongwookim/Workspace/scholar_counter</string>
@@ -23,6 +25,15 @@
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin</string>
+        <key>PYTHONPATH</key>
+        <string>/Users/dongwookim/Workspace/scholar_counter</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+        <!-- Daily refresh at 03:00 local time. -->
+        <key>SCHOLAR_AUTO_UPDATE</key>
+        <string>1</string>
+        <key>SCHOLAR_UPDATE_HOUR</key>
+        <string>3</string>
     </dict>
 </dict>
 </plist>

@@ -1,0 +1,207 @@
+/* Scholar Citation Tracker
+   Layered on Bootstrap 5.3's colour modes: every custom colour derives from a
+   --bs-* token, so light and dark both follow from `data-bs-theme`. */
+
+:root {
+    --sc-radius: 0.75rem;
+    --sc-border: color-mix(in srgb, var(--bs-body-color) 12%, transparent);
+    --sc-shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 4px 16px rgb(0 0 0 / 6%);
+    --sc-shadow-hover: 0 2px 4px rgb(0 0 0 / 6%), 0 12px 32px rgb(0 0 0 / 10%);
+    --sc-positive: var(--bs-success);
+    --sc-negative: var(--bs-danger);
+    --sc-muted: var(--bs-secondary-color);
+}
+
+[data-bs-theme="dark"] {
+    --sc-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 4px 16px rgb(0 0 0 / 30%);
+    --sc-shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 12px 32px rgb(0 0 0 / 40%);
+}
+
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    background-color: var(--bs-body-bg);
+    font-feature-settings: "tnum" 1; /* tabular figures keep counters from jittering */
+}
+
+/* ---------- Layout ---------- */
+
+.app-header {
+    background-color: var(--bs-body-bg);
+    border-bottom: 1px solid var(--sc-border);
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    backdrop-filter: saturate(180%) blur(12px);
+}
+
+.app-header .navbar-brand {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.card {
+    border: 1px solid var(--sc-border);
+    border-radius: var(--sc-radius);
+    box-shadow: var(--sc-shadow);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.card-header {
+    background-color: transparent;
+    border-bottom: 1px solid var(--sc-border);
+    font-weight: 600;
+    padding-block: 0.875rem;
+}
+
+/* ---------- Summary tiles ---------- */
+
+.stat-card:hover {
+    box-shadow: var(--sc-shadow-hover);
+    transform: translateY(-2px);
+}
+
+.stat-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--sc-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.stat-value {
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin-block: 0.35rem 0.15rem;
+}
+
+.stat-meta {
+    font-size: 0.8125rem;
+    color: var(--sc-muted);
+}
+
+/* ---------- Change indicators ---------- */
+
+.change-positive { color: var(--sc-positive); }
+.change-negative { color: var(--sc-negative); }
+.change-neutral  { color: var(--sc-muted); }
+
+/* ---------- Top papers ---------- */
+
+.paper-item {
+    padding: 0.625rem 0;
+    border-bottom: 1px solid var(--sc-border);
+}
+
+.paper-item:last-child { border-bottom: none; }
+
+.paper-rank {
+    flex: 0 0 1.75rem;
+    height: 1.75rem;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background-color: var(--bs-primary-bg-subtle);
+    color: var(--bs-primary-text-emphasis);
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.paper-title {
+    font-size: 0.9375rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.paper-citations {
+    font-size: 0.8125rem;
+    color: var(--sc-muted);
+}
+
+/* ---------- Papers table ---------- */
+
+#papers-table th {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--sc-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+#papers-table td { vertical-align: middle; }
+
+.citation-count {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.trend-mini {
+    width: 100px !important;
+    height: 32px !important;
+}
+
+/* ---------- Charts ---------- */
+
+.chart-box {
+    position: relative;
+    width: 100%;
+}
+
+.chart-box.chart-lg { height: 320px; }
+.chart-box.chart-sm { height: 200px; }
+
+/* ---------- Feedback ---------- */
+
+.toast-stack {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1080;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: min(24rem, calc(100vw - 2rem));
+}
+
+.value-flash { animation: value-flash 0.6s ease; }
+
+@keyframes value-flash {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.06); color: var(--bs-primary); }
+    100% { transform: scale(1); }
+}
+
+.skeleton {
+    display: block;
+    height: 1em;
+    border-radius: 0.25rem;
+    background: linear-gradient(
+        90deg,
+        var(--bs-secondary-bg) 25%,
+        var(--bs-tertiary-bg) 50%,
+        var(--bs-secondary-bg) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    .card:hover { transform: none; }
+}
+
+@media (max-width: 575.98px) {
+    .stat-value { font-size: 1.5rem; }
+    .chart-box.chart-lg { height: 240px; }
+}

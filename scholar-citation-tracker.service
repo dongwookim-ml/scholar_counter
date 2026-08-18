@@ -1,15 +1,17 @@
 [Unit]
-Description=Scholar Citation Tracker Web Application
-After=network.target
-Wants=network.target
+Description=Scholar Citation Tracker
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=YOUR_USERNAME
-Group=YOUR_GROUP
 WorkingDirectory=/path/to/scholar_counter
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/python3 /path/to/scholar_counter/app.py
+Environment=PYTHONPATH=/path/to/scholar_counter
+Environment=PYTHONUNBUFFERED=1
+Environment=SCHOLAR_AUTO_UPDATE=1
+Environment=SCHOLAR_UPDATE_HOUR=3
+ExecStart=/usr/bin/python3 -m scholar_counter.cli serve
 Restart=always
 RestartSec=10
 StandardOutput=journal

@@ -1,14 +1,8 @@
 @echo off
-REM Scholar Citation Tracker Startup Script for Windows
-
+REM Scholar Citation Tracker - Windows launcher
 cd /d "%~dp0"
-echo Starting Scholar Citation Tracker...
-echo Working directory: %CD%
-
-REM Create logs directory if it doesn't exist
 if not exist logs mkdir logs
-
-REM Start the application
-python app.py
-
+set SCHOLAR_AUTO_UPDATE=1
+set SCHOLAR_UPDATE_HOUR=3
+python -m scholar_counter.cli serve
 pause

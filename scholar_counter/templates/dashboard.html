@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>Scholar Citation Tracker</title>
+
+    <script>
+        // Applied before first paint so the theme never flashes.
+        (() => {
+            const stored = localStorage.getItem('sc-theme');
+            const system = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            document.documentElement.dataset.bsTheme = stored || system;
+        })();
+    </script>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <header class="app-header">
+        <nav class="navbar container-fluid px-3 px-lg-4">
+            <span class="navbar-brand mb-0">
+                <i class="fas fa-graduation-cap text-primary me-2"></i>Scholar Citation Tracker
+            </span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-body-secondary small d-none d-md-inline" id="next-update"></span>
+                <button class="btn btn-outline-secondary btn-sm" id="theme-toggle"
+                        type="button" aria-label="Toggle colour theme" title="Toggle colour theme">
+                    <i class="fas fa-circle-half-stroke"></i>
+                </button>
+                <button class="btn btn-primary btn-sm" id="update-btn" type="button">
+                    <i class="fas fa-sync-alt me-1" id="update-icon"></i>
+                    <span id="update-text">Update now</span>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container-fluid px-3 px-lg-4 py-4">
+        <!-- Summary tiles -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-lg-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="stat-label">Total citations</div>
+                        <div class="stat-value" id="total-citations"><span class="skeleton" style="width:5ch"></span></div>
+                        <div class="stat-meta" id="last-updated">&nbsp;</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="stat-label">Since last check</div>
+                        <div class="stat-value" id="daily-change"><span class="skeleton" style="width:3ch"></span></div>
+                        <div class="stat-meta">vs previous snapshot</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="stat-label">Last 7 days</div>
+                        <div class="stat-value" id="weekly-change"><span class="skeleton" style="width:3ch"></span></div>
+                        <div class="stat-meta">net change</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="stat-label">Papers tracked</div>
+                        <div class="stat-value" id="total-papers"><span class="skeleton" style="width:2ch"></span></div>
+                        <div class="stat-meta" id="snapshot-count">&nbsp;</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trend + top papers -->
+        <div class="row g-3 mb-4">
+            <div class="col-lg-8">
+                <div class="card h-100">
+                    <div class="card-header"><i class="fas fa-chart-area text-primary me-2"></i>Citation trend</div>
+                    <div class="card-body">
+                        <div class="chart-box chart-lg"><canvas id="trends-chart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-header"><i class="fas fa-trophy text-warning me-2"></i>Most cited</div>
+                    <div class="card-body" id="top-papers-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Change history -->
+        <div class="row g-3 mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-calendar-day text-info me-2"></i>Change between snapshots</div>
+                    <div class="card-body">
+                        <div class="chart-box chart-sm"><canvas id="changes-chart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Papers table -->
+        <div class="row g-3">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <span><i class="fas fa-list text-secondary me-2"></i>All papers</span>
+                        <div class="d-flex flex-wrap gap-2">
+                            <input type="search" class="form-control form-control-sm" id="paper-filter"
+                                   placeholder="Filter titles…" aria-label="Filter papers" style="width: 12rem;">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Sort papers">
+                                <button type="button" class="btn btn-outline-secondary active" data-sort="citations">Citations</button>
+                                <button type="button" class="btn btn-outline-secondary" data-sort="change">Change</button>
+                                <button type="button" class="btn btn-outline-secondary" data-sort="title">Title</button>
+                            </div>
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Export and analytics">
+                                <a class="btn btn-outline-secondary" href="/api/export/citations.csv" download>
+                                    <i class="fas fa-download me-1"></i>History
+                                </a>
+                                <a class="btn btn-outline-secondary" href="/api/export/papers.csv" download>
+                                    <i class="fas fa-file-csv me-1"></i>Papers
+                                </a>
+                                <button type="button" class="btn btn-outline-secondary" id="analytics-btn">
+                                    <i class="fas fa-chart-bar me-1"></i>Analytics
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0" id="papers-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Title</th>
+                                        <th scope="col" class="text-end">Citations</th>
+                                        <th scope="col" class="text-end">Change</th>
+                                        <th scope="col">Trend</th>
+                                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="papers-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Paper detail -->
+    <div class="modal fade" id="paper-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="paper-modal-title">Paper details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-6 col-md-3">
+                            <div class="stat-label">Citations</div>
+                            <div class="fs-4 fw-bold" id="modal-citations">–</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="stat-label">Total growth</div>
+                            <div class="fs-4 fw-bold" id="modal-growth">–</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="stat-label">Per day</div>
+                            <div class="fs-4 fw-bold" id="modal-per-day">–</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="stat-label">Snapshots</div>
+                            <div class="fs-4 fw-bold" id="modal-points">–</div>
+                        </div>
+                    </div>
+                    <div class="chart-box chart-lg"><canvas id="paper-chart"></canvas></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics -->
+    <div class="modal fade" id="analytics-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-chart-bar me-2"></i>Analytics</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3" id="analytics-grid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

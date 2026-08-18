@@ -162,3 +162,9 @@ cython_debug/
 
 difference
 history
+
+# Scholar Counter local data
+scholar.db
+scholar.db-wal
+scholar.db-shm
+logs/
