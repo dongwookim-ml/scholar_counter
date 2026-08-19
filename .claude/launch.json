@@ -9,6 +9,18 @@
         "SCHOLAR_PORT=8090 SCHOLAR_AUTO_UPDATE=0 PYTHONPATH=. python3 -m scholar_counter.cli serve"
       ],
       "port": 8090
+    },
+    {
+      "name": "pages-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8099",
+        "--directory",
+        "/private/tmp/claude-501/-Users-dongwookim-Workspace-scholar-counter/f1cfdb7f-964d-42a9-88d3-b9e204a14e6e/scratchpad/pages-preview"
+      ],
+      "port": 8099
     }
   ]
 }

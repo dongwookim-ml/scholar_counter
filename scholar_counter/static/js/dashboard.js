@@ -10,6 +10,18 @@
     const el = (id) => document.getElementById(id);
     const charts = new Map();
 
+    // A static build (GitHub Pages) serves pre-generated files from a relative
+    // path; the Flask server serves live endpoints from an absolute one.
+    const IS_STATIC = document.body.dataset.static === 'true';
+    const API = document.body.dataset.apiBase || '/api';
+    const url = {
+        summary: IS_STATIC ? `${API}/summary.json` : `${API}/summary`,
+        papers: IS_STATIC ? `${API}/papers.json` : `${API}/papers`,
+        analytics: IS_STATIC ? `${API}/analytics.json` : `${API}/analytics`,
+        status: IS_STATIC ? `${API}/status.json` : `${API}/status`,
+        trends: (g) => (IS_STATIC ? `${API}/trends/${g}.json` : `${API}/trends?granularity=${g}`),
+    };
+
     const GRANULARITIES = ['daily', 'monthly', 'yearly'];
     const CHANGE_HEADING = { daily: 'Change per day', monthly: 'Change per month', yearly: 'Change per year' };
 
@@ -321,7 +333,7 @@
 
     async function loadSummary() {
         try {
-            const data = await getJSON('/api/summary');
+            const data = await getJSON(url.summary);
             setText('total-citations', int(data.current_total));
             setText('daily-change', signed(data.daily_change));
             setText('weekly-change', signed(data.weekly_change));
@@ -342,7 +354,7 @@
     async function loadTrends() {
         setText('changes-heading', CHANGE_HEADING[granularity]);
         try {
-            const data = await getJSON(`/api/trends?granularity=${granularity}`);
+            const data = await getJSON(url.trends(granularity));
             lineChart('trends-chart', data.overall_trend, 'Total citations');
             changesChart(data.change_trend);
         } catch {
@@ -362,7 +374,7 @@
 
     async function loadPapers() {
         try {
-            const data = await getJSON('/api/papers');
+            const data = await getJSON(url.papers);
             papers = data.papers;
         } catch {
             papers = [];
@@ -372,10 +384,12 @@
 
     async function loadStatus() {
         try {
-            const data = await getJSON('/api/status');
+            const data = await getJSON(url.status);
             setText('snapshot-count', `${int(data.snapshots)} snapshots`);
             const next = el('next-update');
-            if (data.updating) {
+            if (IS_STATIC) {
+                next.textContent = `Updated daily · last run ${data.last_update ?? 'unknown'}`;
+            } else if (data.updating) {
                 next.textContent = 'Updating…';
             } else if (data.auto_update && data.next_update) {
                 next.textContent = `Next auto-update ${data.next_update}`;
@@ -387,25 +401,39 @@
         }
     }
 
-    async function showPaper(title) {
-        try {
-            const data = await getJSON(`/api/paper?title=${encodeURIComponent(title)}`);
-            setText('paper-modal-title', data.title);
-            setText('modal-citations', int(data.current_citations));
-            setText('modal-growth', signed(data.total_growth));
-            setText('modal-per-day', data.avg_daily_growth.toFixed(2));
-            setText('modal-points', String(data.trend.length));
-
-            bootstrap.Modal.getOrCreateInstance(el('paper-modal')).show();
-            lineChart('paper-chart', data.trend, 'Citations');
-        } catch (error) {
-            toast(error.message, 'danger');
+    /* Derived from the already-loaded papers payload rather than fetched:
+       one less round trip, and it works unchanged on the static build. */
+    function paperDetail(paper) {
+        const trend = paper.trend ?? [];
+        if (trend.length < 2) {
+            return { totalGrowth: 0, perDay: 0, points: trend.length };
         }
+        const totalGrowth = trend.at(-1).citations - trend[0].citations;
+        const days = (new Date(trend.at(-1).timestamp) - new Date(trend[0].timestamp)) / 86_400_000;
+        return { totalGrowth, perDay: days > 0 ? totalGrowth / days : 0, points: trend.length };
+    }
+
+    function showPaper(title) {
+        const paper = papers.find((candidate) => candidate.title === title);
+        if (!paper) {
+            toast('Paper not found.', 'danger');
+            return;
+        }
+        const detail = paperDetail(paper);
+
+        setText('paper-modal-title', paper.title);
+        setText('modal-citations', int(paper.current_citations));
+        setText('modal-growth', signed(detail.totalGrowth));
+        setText('modal-per-day', detail.perDay.toFixed(2));
+        setText('modal-points', String(detail.points));
+
+        bootstrap.Modal.getOrCreateInstance(el('paper-modal')).show();
+        lineChart('paper-chart', paper.trend, 'Citations');
     }
 
     async function showAnalytics() {
         try {
-            const d = await getJSON('/api/analytics');
+            const d = await getJSON(url.analytics);
             const grid = el('analytics-grid');
             grid.replaceChildren(
                 statTile('Total growth', signed(d.total_growth), 'change-positive'),
@@ -469,7 +497,7 @@
     }
 
     function init() {
-        el('update-btn').addEventListener('click', runUpdate);
+        el('update-btn')?.addEventListener('click', runUpdate);
         el('analytics-btn').addEventListener('click', showAnalytics);
 
         el('theme-toggle').addEventListener('click', () => {

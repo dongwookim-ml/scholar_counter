@@ -48,3 +48,8 @@ def test_rejects_non_numeric_port(monkeypatch):
     monkeypatch.setenv("SCHOLAR_PORT", "eighty-eighty")
     with pytest.raises(ValueError, match="must be an integer"):
         Settings.from_env()
+
+
+def test_auto_update_is_off_by_default():
+    """GitHub Actions owns the crawl; a local scheduler would compete with it."""
+    assert Settings().auto_update is False

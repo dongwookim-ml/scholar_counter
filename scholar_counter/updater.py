@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from . import db
+from . import db, store
 from .config import Settings
 from .scraper import ScrapeError, fetch_citations
 
@@ -55,10 +55,17 @@ def run_update(settings: Settings) -> UpdateResult:
         logger.info("Fetching Google Scholar profile %s", settings.scholar_user_id)
         counts = fetch_citations(settings)
 
+        # A fresh checkout (or CI runner) has no cache; rebuild it from the
+        # committed JSON before comparing, so the delta is against real history.
+        store.sync_database(settings.data_dir, settings.database)
+
+        captured_at = datetime.now()
         with db.session(settings.database) as conn:
             previous = db.latest_snapshot(conn)
             previous_total = previous["total"] if previous is not None else None
-            db.save_snapshot(conn, datetime.now(), counts)
+            db.save_snapshot(conn, captured_at, counts)
+
+        store.write_snapshot(settings.data_dir, captured_at, counts)
 
         total = sum(counts.values())
         changed = previous_total is not None and total != previous_total

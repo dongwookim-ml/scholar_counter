@@ -6,7 +6,7 @@ import argparse
 import logging
 import sys
 
-from . import db
+from . import db, store
 from .app import create_app
 from .config import Settings
 from .migrate import migrate
@@ -57,7 +57,29 @@ def _migrate(settings: Settings) -> int:
     return 0
 
 
+def _export(settings: Settings) -> int:
+    written = store.export_database(settings.data_dir, settings.database)
+    print(f"Wrote {written} JSON snapshot(s) to {settings.data_dir}.")
+    return 0
+
+
+def _sync(settings: Settings) -> int:
+    loaded = store.sync_database(settings.data_dir, settings.database, force=True)
+    print(f"Rebuilt {settings.database.name} from {loaded} JSON snapshot(s).")
+    return 0
+
+
+def _build(settings: Settings) -> int:
+    from .build import build_site
+
+    store.sync_database(settings.data_dir, settings.database)
+    output = build_site(settings)
+    print(f"Static site written to {output}")
+    return 0
+
+
 def _status(settings: Settings) -> int:
+    store.sync_database(settings.data_dir, settings.database)
     with db.session(settings.database) as conn:
         latest = db.latest_snapshot(conn)
         total = db.snapshot_count(conn)
@@ -81,6 +103,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("update", help="fetch the profile once and store a snapshot")
     sub.add_parser("migrate", help="import legacy history/*.pkl files into SQLite")
     sub.add_parser("status", help="print what is currently stored")
+    sub.add_parser("export", help="write the database out as JSON snapshots")
+    sub.add_parser("sync", help="rebuild the database cache from JSON snapshots")
+    sub.add_parser("build", help="generate the static site")
 
     args = parser.parse_args(argv)
     settings = Settings.from_env()
@@ -91,6 +116,9 @@ def main(argv: list[str] | None = None) -> int:
         "update": _update,
         "migrate": _migrate,
         "status": _status,
+        "export": _export,
+        "sync": _sync,
+        "build": _build,
     }
     return handlers[args.command or "serve"](settings)
 

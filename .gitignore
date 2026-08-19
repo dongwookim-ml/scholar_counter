@@ -168,3 +168,6 @@ scholar.db
 scholar.db-wal
 scholar.db-shm
 logs/
+
+# Static site build output
+site/

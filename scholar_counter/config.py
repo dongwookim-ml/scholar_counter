@@ -40,11 +40,14 @@ class Settings:
     port: int = 8080
     debug: bool = False
     database: Path = PROJECT_ROOT / "scholar.db"
+    # Committed JSON snapshots; the source of truth, unlike the cache above.
+    data_dir: Path = PROJECT_ROOT / "data" / "snapshots"
     request_timeout: float = 30.0
     user_agent: str = DEFAULT_USER_AGENT
 
-    # Scheduled updates
-    auto_update: bool = True
+    # Scheduled updates. Off by default: GitHub Actions owns the daily
+    # crawl, and a second scheduler would write competing snapshots.
+    auto_update: bool = False
     update_hour: int = 3
     update_minute: int = 0
     # Run an update at startup if the newest snapshot is older than this.
@@ -66,12 +69,14 @@ class Settings:
         # off a default-constructed instance instead.
         d = cls()
         database = os.environ.get("SCHOLAR_DATABASE")
+        data_dir = os.environ.get("SCHOLAR_DATA_DIR")
         settings = cls(
             scholar_user_id=os.environ.get("SCHOLAR_USER_ID", d.scholar_user_id),
             host=os.environ.get("SCHOLAR_HOST", d.host),
             port=_env_int("SCHOLAR_PORT", d.port),
             debug=_env_bool("SCHOLAR_DEBUG", d.debug),
             database=Path(database).expanduser() if database else d.database,
+            data_dir=Path(data_dir).expanduser() if data_dir else d.data_dir,
             request_timeout=float(os.environ.get("SCHOLAR_TIMEOUT", d.request_timeout)),
             user_agent=os.environ.get("SCHOLAR_USER_AGENT", d.user_agent),
             auto_update=_env_bool("SCHOLAR_AUTO_UPDATE", d.auto_update),

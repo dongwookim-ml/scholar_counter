@@ -7,9 +7,9 @@ import io
 import logging
 from typing import Any
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, url_for
 
-from . import analytics, db
+from . import analytics, db, store
 from .config import Settings
 from .scheduler import DailyUpdater
 from .updater import is_running, run_update
@@ -34,6 +34,9 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool = True
     app = Flask(__name__)
     app.config["SETTINGS"] = settings
 
+    # The database is a derived cache; the committed JSON is the source of truth.
+    store.sync_database(settings.data_dir, settings.database)
+
     scheduler: DailyUpdater | None = None
     if start_scheduler and settings.auto_update:
         scheduler = DailyUpdater(settings)
@@ -45,7 +48,13 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool = True
 
     @app.get("/")
     def dashboard() -> str:
-        return render_template("dashboard.html")
+        return render_template(
+            "dashboard.html",
+            static_site=False,
+            api_base="/api",
+            css_url=url_for("static", filename="css/style.css"),
+            js_url=url_for("static", filename="js/dashboard.js"),
+        )
 
     @app.get("/api/summary")
     def api_summary():

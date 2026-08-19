@@ -1,57 +1,70 @@
 # Scholar Citation Tracker
 
-Tracks the citation counts on a Google Scholar profile over time and serves a
-dashboard of the history: totals, per-paper trends, and change between snapshots.
+Tracks the citation counts on a Google Scholar profile over time and publishes
+a dashboard of the history: totals, per-paper trends, and change between
+snapshots.
 
-Data is refreshed automatically once a day. The dashboard reads from a local
-SQLite database, so it stays fast as the history grows.
+**Dashboard: <https://dongwookim-ml.github.io/scholar_counter/>**
 
-## Install
+A GitHub Actions workflow scrapes the profile once a day, commits the snapshot
+to this repository, and redeploys the dashboard. No machine of yours needs to
+be running.
+
+## How it works
+
+```
+GitHub Actions (daily)
+  └─ scrape profile ─→ data/snapshots/YYYYMMDDTHHMMSS.json ─→ commit
+                                   │
+                                   └─→ build static site ─→ GitHub Pages
+```
+
+`data/snapshots/` is the source of truth: one small JSON file per scrape,
+committed to the repo so the history survives the ephemeral runner. Keys are
+sorted, so a day's diff shows exactly which papers moved.
+
+`scholar.db` is a **derived cache**, rebuilt from those JSON files whenever the
+two disagree. It is never committed. Aggregation runs in SQL, which is why the
+dashboard stays fast as the history grows.
+
+## Local use
 
 ```bash
 pip install -e ".[dev]"
-```
-
-Python 3.11 or newer. The only runtime dependencies are Flask, requests, and
-BeautifulSoup.
-
-## Run
-
-```bash
 scholar-counter serve
 ```
 
-Then open <http://127.0.0.1:8080>. Other commands:
+Then open <http://127.0.0.1:8080>. On a fresh clone the cache is built
+automatically from the committed JSON.
 
 | Command | Purpose |
 | --- | --- |
-| `scholar-counter serve` | Run the dashboard (default command) |
-| `scholar-counter update` | Fetch the profile once and store a snapshot |
+| `scholar-counter serve` | Run the dashboard locally (default command) |
+| `scholar-counter build` | Generate the static site into `site/` |
+| `scholar-counter update` | Scrape once and record a snapshot |
 | `scholar-counter status` | Print what is currently stored |
-| `scholar-counter migrate` | Import legacy `history/*.pkl` files |
+| `scholar-counter sync` | Force-rebuild the cache from JSON |
+| `scholar-counter export` | Write the cache back out as JSON |
 
 Every command also works as `python -m scholar_counter.cli <command>`.
 
-## Automatic updates
+Local scraping is **off by default** — GitHub owns the daily crawl, and a
+second scheduler would write competing snapshots. Set `SCHOLAR_AUTO_UPDATE=1`
+if you want a local instance to scrape as well.
 
-`serve` starts a background thread that scrapes the profile once a day at
-`SCHOLAR_UPDATE_HOUR` (03:00 by default). Two details make this reliable on a
-laptop rather than a server:
+## The daily workflow
 
-- **Catch-up on start.** If the newest snapshot is older than
-  `SCHOLAR_STALE_AFTER_HOURS`, an update runs immediately. A machine that was
-  asleep at 03:00 refreshes when it wakes instead of waiting another day.
-- **One update at a time.** The scheduled run and the *Update now* button share
-  a lock, so they can never scrape concurrently.
-- **Back off, don't skip.** Google Scholar rate-limits automated clients
-  routinely, answering `429` with a bot-check page. A failed run retries after
-  `SCHOLAR_RETRY_AFTER_MINUTES` rather than waiting for the next daily slot.
-  Failed scrapes never write a snapshot, so the history has no bogus points.
+`.github/workflows/daily-update.yml` runs at 18:00 UTC (03:00 KST) and on
+demand from the Actions tab. It:
 
-The dashboard header shows when the next automatic update is due.
+1. Scrapes the profile, retrying up to three times two minutes apart, because
+   Google rate-limits automated clients intermittently.
+2. Commits the new snapshot, and skips the commit when nothing changed.
+3. Rebuilds the static site and deploys it to Pages.
 
-To drive updates from cron or launchd instead, set `SCHOLAR_AUTO_UPDATE=0` and
-schedule `scholar-counter update`.
+A scrape that fails every attempt fails the workflow rather than committing
+anything, so the history never gains a bogus point and you get a notification.
+Pushes that touch `scholar_counter/**` redeploy the site without scraping.
 
 ## Configuration
 
@@ -63,10 +76,11 @@ All settings come from the environment; there is no config file to edit.
 | `SCHOLAR_HOST` | `127.0.0.1` | Bind address |
 | `SCHOLAR_PORT` | `8080` | Port |
 | `SCHOLAR_DEBUG` | `0` | Flask debug mode |
-| `SCHOLAR_DATABASE` | `./scholar.db` | SQLite file |
-| `SCHOLAR_AUTO_UPDATE` | `1` | Enable the daily scheduler |
-| `SCHOLAR_UPDATE_HOUR` | `3` | Hour of the daily update (0–23, local time) |
-| `SCHOLAR_UPDATE_MINUTE` | `0` | Minute of the daily update |
+| `SCHOLAR_DATA_DIR` | `./data/snapshots` | Committed JSON snapshots |
+| `SCHOLAR_DATABASE` | `./scholar.db` | Derived SQLite cache |
+| `SCHOLAR_AUTO_UPDATE` | `0` | Enable the local daily scheduler |
+| `SCHOLAR_UPDATE_HOUR` | `3` | Hour of the local scheduled update |
+| `SCHOLAR_UPDATE_MINUTE` | `0` | Minute of the local scheduled update |
 | `SCHOLAR_STALE_AFTER_HOURS` | `24` | Age at which startup triggers a catch-up |
 | `SCHOLAR_RETRY_AFTER_MINUTES` | `60` | Delay before retrying a failed update |
 | `SCHOLAR_TIMEOUT` | `30` | HTTP timeout in seconds |
@@ -77,57 +91,6 @@ authentication and its update endpoint triggers outbound scraping, so bind it
 to `0.0.0.0` only on a trusted network, and never together with
 `SCHOLAR_DEBUG=1` — that combination exposes the Werkzeug debugger.
 
-## Running at login
-
-### macOS (launchd)
-
-```bash
-cp com.scholar-citation-tracker.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.scholar-citation-tracker.plist
-```
-
-The plist in this repository is generated for this checkout's paths and Python
-interpreter. Edit those strings if either changes. To apply a code change:
-
-```bash
-launchctl unload ~/Library/LaunchAgents/com.scholar-citation-tracker.plist
-launchctl load ~/Library/LaunchAgents/com.scholar-citation-tracker.plist
-```
-
-Logs land in `logs/scholar-tracker.log` and `logs/scholar-tracker-error.log`.
-
-### Linux (systemd)
-
-Edit the paths and username in `scholar-citation-tracker.service`, then:
-
-```bash
-sudo cp scholar-citation-tracker.service /etc/systemd/system/
-sudo systemctl enable --now scholar-citation-tracker
-```
-
-### Windows
-
-Run `start_scholar_tracker.bat`, or point Task Scheduler at it with an
-"at log on" trigger.
-
-## API
-
-| Endpoint | Returns |
-| --- | --- |
-| `GET /` | Dashboard |
-| `GET /api/summary` | Totals, recent change, top papers |
-| `GET /api/trends?granularity=…` | Total-citation series and change, bucketed |
-| `GET /api/papers` | Every paper with its trend |
-| `GET /api/paper?title=…` | One paper's detail |
-| `GET /api/analytics` | Aggregate metrics |
-| `GET /api/status` | Snapshot count, last update, next scheduled update |
-| `GET /api/export/citations.csv` | History as CSV |
-| `GET /api/export/papers.csv` | Per-paper history as CSV |
-| `POST /api/update` | Scrape now |
-
-Endpoints return `404` with an `{"error": …}` body when no data has been
-collected yet, and `POST /api/update` returns `503` when a scrape fails.
-
 ## Chart granularity
 
 The trend chart groups snapshots into calendar buckets: `daily`, `monthly`, or
@@ -136,53 +99,49 @@ The trend chart groups snapshots into calendar buckets: `daily`, `monthly`, or
 bucket. A bucket with no snapshots is absent rather than zero, so a gap is
 visible instead of being drawn as a flat stretch.
 
-The dashboard remembers the selected view. To query directly:
+## API
 
-```bash
-curl 'http://127.0.0.1:8080/api/trends?granularity=monthly'
-```
+The Flask server exposes these; the static build writes each one to a file
+under `api/` so the published dashboard needs no backend.
 
-## Storage
+| Endpoint | Static file | Returns |
+| --- | --- | --- |
+| `GET /api/summary` | `api/summary.json` | Totals, recent change, top papers |
+| `GET /api/trends?granularity=…` | `api/trends/<g>.json` | Totals and change, bucketed |
+| `GET /api/papers` | `api/papers.json` | Every paper with its trend |
+| `GET /api/analytics` | `api/analytics.json` | Aggregate metrics |
+| `GET /api/status` | `api/status.json` | Snapshot count and last update |
+| `GET /api/export/citations.csv` | same path | History as CSV |
+| `GET /api/export/papers.csv` | same path | Per-paper history as CSV |
+| `GET /api/paper?title=…` | — | One paper's detail (server only) |
+| `POST /api/update` | — | Scrape now (server only) |
 
-Everything lives in `scholar.db`:
-
-```sql
-snapshot(id, captured_at)
-citation(snapshot_id, title, citations)
-```
-
-Change between snapshots is derived in SQL rather than stored, so it cannot
-drift from the totals.
-
-### Migrating from the pickle layout
-
-Earlier versions wrote one pickle per snapshot into `history/` and one CSV of
-changes into `difference/`. To import them:
-
-```bash
-scholar-counter migrate
-```
-
-`migrate` only reads those folders, so they remain a backup. It is idempotent,
-keyed on each file's timestamp, so re-running it will not duplicate snapshots.
-
-Two things changed in the process, both of which fix real bugs:
-
-- **Change is now computed from totals.** The old CSVs summed per-paper
-  increases among papers *currently* on the profile. When Scholar merged or
-  dropped an entry, those citations vanished from the total but not from the
-  reported growth. On 2026-05-18 the old code reported `+80` while the total
-  actually moved `+46`, because a 34-citation entry had been merged away.
-- **Titles containing commas survive.** The old CSVs were written with a bare
-  `"%s, %s"` format, so any comma in a title corrupted the row.
+The static files are generated by calling these endpoints through Flask's test
+client, so the published site cannot drift from the live API.
 
 ## Development
 
 ```bash
-pytest        # 80 tests, no network access
+pytest        # 105 tests, no network access
 ruff check .
 ruff format .
 ```
 
-`.claude/launch.json` defines a dev server on port 8090 with auto-update off,
-so it can run alongside an installed service on 8080.
+CI runs both on Python 3.11 and 3.12.
+
+`.claude/launch.json` defines two preview servers: `scholar-dev` (Flask on
+8090) and `pages-preview` (the built static site on 8099).
+
+## History
+
+Earlier versions stored one pickle per snapshot in `history/` and one CSV of
+changes in `difference/`, and ran as a launchd service on a Mac. Those folders
+are gitignored and remain untouched as a backup; `scholar-counter migrate`
+imports them. Two bugs were fixed in the move:
+
+- **Change ignored removed papers.** The old CSVs summed per-paper increases
+  among papers *currently* listed. When Scholar merged an entry away, its
+  citations left the total but not the reported growth — on 2026-05-18 that
+  read `+80` against a real `+46`. Change is now derived from totals.
+- **Titles containing commas corrupted the CSV**, which was written with a bare
+  `"%s, %s"` format.
