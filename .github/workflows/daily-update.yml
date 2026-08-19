@@ -1,16 +1,21 @@
-# Scrapes Google Scholar once a day, commits the snapshot, and republishes
-# the dashboard to GitHub Pages.
+# Keeps the citation history current and republishes the dashboard.
+#
+# Google Scholar refuses many datacenter egress IPs with 403. Every attempt
+# inside one job shares the runner's IP, so retrying in-place achieves little.
+# Instead this runs several times a day: each run lands on a different runner,
+# and the first one Google will serve records the day's snapshot. Later runs
+# see a fresh snapshot and exit immediately.
 name: Daily citation update
 
 on:
   schedule:
-    # 18:00 UTC == 03:00 KST the next morning, matching the old local schedule.
-    - cron: "0 18 * * *"
+    # Every four hours. 18:00 UTC is 03:00 KST, the original local slot.
+    - cron: "0 2,6,10,14,18,22 * * *"
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      # Republish when the site itself changes, not on every code commit.
+      # Republish when the site itself changes, without scraping.
       - "scholar_counter/**"
       - ".github/workflows/daily-update.yml"
 
@@ -19,14 +24,21 @@ permissions:
   pages: write
   id-token: write
 
-# Never let two runs write snapshots or deploy at the same time.
 concurrency:
   group: daily-update
   cancel-in-progress: false
 
+env:
+  # Consider the day covered once a snapshot is this recent.
+  FRESH_HOURS: "20"
+  # Alarm only when the history has genuinely fallen behind.
+  STALE_HOURS: "48"
+
 jobs:
   update:
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,34 +51,30 @@ jobs:
         run: pip install -e .
 
       - name: Scrape Google Scholar
-        id: scrape
         if: github.event_name != 'push'
         env:
           PYTHONPATH: .
         run: |
-          # Scholar rate-limits intermittently, so retry before giving up.
-          for attempt in 1 2 3; do
-            if python -m scholar_counter.cli update; then
-              python -m scholar_counter.cli status
-              exit 0
-            fi
-            echo "::warning::Attempt $attempt failed; retrying in 120s"
-            sleep 120
-          done
-          echo "::error::Google Scholar could not be reached after 3 attempts."
-          exit 1
+          if python -m scholar_counter.cli update --skip-if-fresh-hours "$FRESH_HOURS"; then
+            exit 0
+          fi
+          # Not a failure worth alarming on: the next run gets a different IP.
+          echo "::warning::Scholar refused this runner. A later run will retry elsewhere."
 
       - name: Commit the snapshot
+        id: commit
         if: github.event_name != 'push'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/snapshots
           if git diff --cached --quiet; then
-            echo "No new snapshot to commit."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No new snapshot."
           else
             git commit -m "Record citation snapshot $(date -u +%Y-%m-%d)"
             git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build the static site
@@ -78,8 +86,17 @@ jobs:
         with:
           path: site
 
+      - name: Fail if the history has gone stale
+        # Runs last so a stale-data alarm never blocks the deploy.
+        if: github.event_name == 'schedule'
+        env:
+          PYTHONPATH: .
+        run: python -m scholar_counter.cli check --max-age-hours "$STALE_HOURS"
+
   deploy:
     needs: update
+    # Skipped when a scheduled run found nothing new to publish.
+    if: always() && (needs.update.outputs.changed == 'true' || github.event_name != 'schedule')
     runs-on: ubuntu-latest
     environment:
       name: github-pages

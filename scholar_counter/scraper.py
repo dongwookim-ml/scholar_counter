@@ -25,9 +25,14 @@ class RateLimited(ScrapeError):
     """Google served its bot-check page instead of the profile."""
 
 
+# 429 is explicit rate limiting; 403 is what Google returns to an egress IP
+# it has decided not to serve, which is the usual answer for datacenter ranges.
+BLOCKED_STATUSES = frozenset({403, 429})
+
+
 def _is_bot_check(response: requests.Response) -> bool:
-    """Google redirects blocked clients to /sorry/ and answers 429."""
-    return response.status_code == 429 or "/sorry/" in response.url
+    """True when Google served a block page instead of the profile."""
+    return response.status_code in BLOCKED_STATUSES or "/sorry/" in response.url
 
 
 def parse_page(html: str | bytes) -> dict[str, int]:
@@ -67,8 +72,10 @@ def fetch_citations(settings: Settings, session: requests.Session | None = None)
                 )
                 if _is_bot_check(response):
                     raise RateLimited(
-                        "Google Scholar is rate-limiting this network and served a "
-                        "bot check instead of the profile. Try again later."
+                        f"Google Scholar refused this request ({response.status_code}) and "
+                        "served a block page instead of the profile. This is usually the "
+                        "egress IP rather than the request; a later run from a different "
+                        "host normally succeeds."
                     )
                 response.raise_for_status()
             except requests.RequestException as exc:

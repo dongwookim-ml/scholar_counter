@@ -42,7 +42,9 @@ automatically from the committed JSON.
 | `scholar-counter serve` | Run the dashboard locally (default command) |
 | `scholar-counter build` | Generate the static site into `site/` |
 | `scholar-counter update` | Scrape once and record a snapshot |
+| `scholar-counter update --skip-if-fresh-hours H` | Scrape only if the newest snapshot is older than H |
 | `scholar-counter status` | Print what is currently stored |
+| `scholar-counter check` | Exit non-zero if the data has gone stale |
 | `scholar-counter sync` | Force-rebuild the cache from JSON |
 | `scholar-counter export` | Write the cache back out as JSON |
 
@@ -54,17 +56,26 @@ if you want a local instance to scrape as well.
 
 ## The daily workflow
 
-`.github/workflows/daily-update.yml` runs at 18:00 UTC (03:00 KST) and on
-demand from the Actions tab. It:
+Google Scholar refuses many datacenter IPs outright, answering `403` rather
+than serving the profile. This is a property of the runner's egress IP, not of
+the request, so retrying inside a single job is close to useless: every attempt
+shares that same IP.
 
-1. Scrapes the profile, retrying up to three times two minutes apart, because
-   Google rate-limits automated clients intermittently.
-2. Commits the new snapshot, and skips the commit when nothing changed.
-3. Rebuilds the static site and deploys it to Pages.
+`.github/workflows/daily-update.yml` works around it by running **every four
+hours** instead of once. Each run lands on a different runner, and the first
+one Google is willing to serve records the day's snapshot. Runs that find a
+snapshot less than 20 hours old exit immediately without scraping, so the extra
+schedule costs seconds, not six scrapes a day.
 
-A scrape that fails every attempt fails the workflow rather than committing
-anything, so the history never gains a bogus point and you get a notification.
-Pushes that touch `scholar_counter/**` redeploy the site without scraping.
+A refused run logs a warning and finishes green, because the next attempt is
+four hours away and a red run per block would be noise. The alarm is staleness
+instead: a scheduled run fails if the newest snapshot is more than 48 hours
+old, which means the blocking has stopped being transient. That check runs
+after the deploy, so a stale-data alarm never blocks publishing.
+
+Snapshots are committed only when the data changed, and a failed scrape writes
+nothing, so the history never gains a bogus point. Pushes touching
+`scholar_counter/**` redeploy the site without scraping.
 
 ## Configuration
 
@@ -122,7 +133,7 @@ client, so the published site cannot drift from the live API.
 ## Development
 
 ```bash
-pytest        # 105 tests, no network access
+pytest        # 115 tests, no network access
 ruff check .
 ruff format .
 ```

@@ -116,9 +116,31 @@ def test_bot_check_redirect_is_reported_as_rate_limiting():
         def get(self, *args, **kwargs):
             return FakeResponse("<html>captcha</html>", 429, "https://www.google.com/sorry/index")
 
-    with pytest.raises(RateLimited, match="rate-limiting"):
+    with pytest.raises(RateLimited, match="block page"):
         fetch_citations(Settings(), session=BlockedSession([]))
 
 
 def test_rate_limiting_is_a_scrape_error():
     assert issubclass(RateLimited, ScrapeError)
+
+
+@pytest.mark.parametrize("status", [403, 429])
+def test_block_statuses_are_reported_as_rate_limiting(status):
+    """403 is what Google returns to an egress IP it will not serve; a raw
+    HTTP error hid that this is a blocking condition, not a bad request."""
+
+    class BlockedSession(FakeSession):
+        def get(self, *args, **kwargs):
+            return FakeResponse("<html>blocked</html>", status)
+
+    with pytest.raises(RateLimited, match="refused this request"):
+        fetch_citations(Settings(), session=BlockedSession([]))
+
+
+def test_block_message_points_at_the_egress_ip():
+    class BlockedSession(FakeSession):
+        def get(self, *args, **kwargs):
+            return FakeResponse("<html>blocked</html>", 403)
+
+    with pytest.raises(RateLimited, match="egress IP"):
+        fetch_citations(Settings(), session=BlockedSession([]))

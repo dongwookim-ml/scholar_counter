@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from datetime import datetime
 
 from . import db, store
 from .app import create_app
@@ -43,10 +44,40 @@ def _serve(settings: Settings) -> int:
     return 0
 
 
-def _update(settings: Settings) -> int:
+def _latest_age_hours(settings: Settings) -> float | None:
+    """Hours since the newest snapshot, or None when there is no data."""
+    store.sync_database(settings.data_dir, settings.database)
+    with db.session(settings.database) as conn:
+        latest = db.latest_snapshot(conn)
+    if latest is None:
+        return None
+    delta = datetime.now() - datetime.fromisoformat(latest["captured_at"])
+    return delta.total_seconds() / 3600
+
+
+def _update(settings: Settings, args: argparse.Namespace) -> int:
+    if args.skip_if_fresh_hours is not None:
+        age = _latest_age_hours(settings)
+        if age is not None and age < args.skip_if_fresh_hours:
+            print(f"Latest snapshot is {age:.1f}h old; nothing to do.")
+            return 0
+
     result = run_update(settings)
     print(result.message)
     return 0 if result.success else 1
+
+
+def _check(settings: Settings, args: argparse.Namespace) -> int:
+    """Exit non-zero when the data has gone stale, for CI to alarm on."""
+    age = _latest_age_hours(settings)
+    if age is None:
+        print("No data recorded at all.")
+        return 1
+    if age > args.max_age_hours:
+        print(f"Stale: newest snapshot is {age:.1f}h old (limit {args.max_age_hours}h).")
+        return 1
+    print(f"Fresh: newest snapshot is {age:.1f}h old.")
+    return 0
 
 
 def _migrate(settings: Settings) -> int:
@@ -100,7 +131,18 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("serve", help="run the dashboard web server (default)")
-    sub.add_parser("update", help="fetch the profile once and store a snapshot")
+
+    update = sub.add_parser("update", help="fetch the profile once and store a snapshot")
+    update.add_argument(
+        "--skip-if-fresh-hours",
+        type=float,
+        default=None,
+        metavar="H",
+        help="do nothing if the newest snapshot is younger than H hours",
+    )
+
+    check = sub.add_parser("check", help="exit non-zero if the data has gone stale")
+    check.add_argument("--max-age-hours", type=float, default=48.0, metavar="H")
     sub.add_parser("migrate", help="import legacy history/*.pkl files into SQLite")
     sub.add_parser("status", help="print what is currently stored")
     sub.add_parser("export", help="write the database out as JSON snapshots")
@@ -111,9 +153,14 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     _configure_logging(args.debug or settings.debug)
 
+    # These two need the parsed arguments; the rest only need settings.
+    if args.command == "update":
+        return _update(settings, args)
+    if args.command == "check":
+        return _check(settings, args)
+
     handlers = {
         "serve": _serve,
-        "update": _update,
         "migrate": _migrate,
         "status": _status,
         "export": _export,
