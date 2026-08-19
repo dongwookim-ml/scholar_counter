@@ -55,10 +55,24 @@ def _latest_age_hours(settings: Settings) -> float | None:
     return delta.total_seconds() / 3600
 
 
+def _warn_if_clock_skewed(age: float | None) -> None:
+    """A snapshot dated in the future means the writer and reader disagree
+    about the timezone, which silently corrupts every freshness decision."""
+    if age is not None and age < 0:
+        print(
+            f"WARNING: newest snapshot is dated {abs(age):.1f}h in the future. "
+            "The clock or timezone differs from whatever recorded it; "
+            "freshness and staleness checks cannot be trusted until that is fixed.",
+            file=sys.stderr,
+        )
+
+
 def _update(settings: Settings, args: argparse.Namespace) -> int:
     if args.skip_if_fresh_hours is not None:
         age = _latest_age_hours(settings)
-        if age is not None and age < args.skip_if_fresh_hours:
+        _warn_if_clock_skewed(age)
+        # A negative age is skew, not freshness, so it must not skip the scrape.
+        if age is not None and 0 <= age < args.skip_if_fresh_hours:
             print(f"Latest snapshot is {age:.1f}h old; nothing to do.")
             return 0
 
@@ -72,6 +86,10 @@ def _check(settings: Settings, args: argparse.Namespace) -> int:
     age = _latest_age_hours(settings)
     if age is None:
         print("No data recorded at all.")
+        return 1
+    _warn_if_clock_skewed(age)
+    if age < 0:
+        print(f"Clock skew: newest snapshot is {abs(age):.1f}h in the future.")
         return 1
     if age > args.max_age_hours:
         print(f"Stale: newest snapshot is {age:.1f}h old (limit {args.max_age_hours}h).")

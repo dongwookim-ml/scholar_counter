@@ -77,6 +77,18 @@ Snapshots are committed only when the data changed, and a failed scrape writes
 nothing, so the history never gains a bogus point. Pushes touching
 `scholar_counter/**` redeploy the site without scraping.
 
+### Timezones
+
+Snapshot timestamps are naive local times, and the whole history was recorded
+in Seoul time. Runners default to UTC, so the workflow sets `TZ: Asia/Seoul` to
+match. Without it every age calculation was nine hours out and reported
+snapshots as *negative* hours old. If you relocate this to another timezone,
+change that value rather than leaving the two to disagree.
+
+Both `update --skip-if-fresh-hours` and `check` refuse to treat a
+future-dated snapshot as fresh, so a timezone mismatch fails loudly instead of
+silently suppressing every scrape.
+
 ## Configuration
 
 All settings come from the environment; there is no config file to edit.
@@ -133,7 +145,7 @@ client, so the published site cannot drift from the live API.
 ## Development
 
 ```bash
-pytest        # 115 tests, no network access
+pytest        # 117 tests, no network access
 ruff check .
 ruff format .
 ```

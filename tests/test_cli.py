@@ -74,3 +74,24 @@ def test_update_reports_failure_with_nonzero_exit(env, monkeypatch):
 
     monkeypatch.setattr("scholar_counter.updater.fetch_citations", blocked)
     assert main(["update"]) == 1
+
+
+def test_future_snapshot_does_not_count_as_fresh(env, monkeypatch, capsys):
+    """A negative age means the writer and reader disagree about the timezone.
+    Treating it as freshness would silently suppress every future scrape."""
+    seed(env, age_hours=-6)
+    scraped = []
+    monkeypatch.setattr(
+        "scholar_counter.updater.fetch_citations",
+        lambda *a, **k: scraped.append(1) or {"Alpha": 9},
+    )
+
+    assert main(["update", "--skip-if-fresh-hours", "20"]) == 0
+    assert scraped == [1], "skew must not be mistaken for a recent snapshot"
+    assert "in the future" in capsys.readouterr().err
+
+
+def test_check_fails_on_clock_skew(env, capsys):
+    seed(env, age_hours=-6)
+    assert main(["check", "--max-age-hours", "48"]) == 1
+    assert "Clock skew" in capsys.readouterr().out

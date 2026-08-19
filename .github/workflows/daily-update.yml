@@ -29,6 +29,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Snapshots carry naive local timestamps, and the whole history was recorded
+  # in Seoul time. Runners default to UTC, which made every age calculation
+  # nine hours out and produced negative ages. Pin the runner to match.
+  TZ: Asia/Seoul
   # Consider the day covered once a snapshot is this recent.
   FRESH_HOURS: "20"
   # Alarm only when the history has genuinely fallen behind.
