@@ -51,6 +51,45 @@ def test_papers_sorted_by_citations_with_recent_change(seeded):
     assert len(papers[0]["trend"]) == 3
 
 
+def test_paper_changes_per_day_month_and_year(conn):
+    db.save_snapshot(conn, datetime(2024, 12, 20), {"Alpha": 10})
+    db.save_snapshot(conn, datetime(2025, 1, 28), {"Alpha": 15})
+    db.save_snapshot(conn, datetime(2025, 2, 13), {"Alpha": 18})
+    db.save_snapshot(conn, datetime(2025, 2, 14, 9, 0), {"Alpha": 19})
+    db.save_snapshot(conn, datetime(2025, 2, 14, 18, 0), {"Alpha": 21})
+
+    changes = analytics.papers(conn)[0]["changes"]
+
+    # Each is measured from the last snapshot before the newest bucket, so the
+    # morning scrape on the same day is not the daily baseline.
+    assert changes == {"daily": 3, "monthly": 6, "yearly": 11}
+
+
+def test_paper_changes_match_the_bucketed_totals(conn):
+    """With a stable set of papers, the rows add up to the chart's last bar."""
+    base = datetime(2024, 12, 30)  # so every granularity has an earlier bucket
+    db.save_snapshot(conn, base, {"Alpha": 5, "Beta": 1})
+    db.save_snapshot(conn, base + timedelta(days=4), {"Alpha": 9, "Beta": 4})
+    db.save_snapshot(conn, base + timedelta(days=5), {"Alpha": 10, "Beta": 6})
+
+    papers = analytics.papers(conn)
+    for granularity in ("daily", "monthly", "yearly"):
+        latest_bar = db.bucketed_totals(conn, granularity)[-1]["change"] or 0
+        assert sum(paper["changes"][granularity] for paper in papers) == latest_bar
+
+
+def test_paper_first_seen_in_the_newest_bucket_counts_from_first_sighting(conn):
+    """A retitled paper arrives with its old count; that is not new growth."""
+    db.save_snapshot(conn, datetime(2025, 1, 10), {"Alpha": 5})
+    db.save_snapshot(conn, datetime(2025, 2, 10), {"Alpha": 5, "Beta (retitled)": 30})
+    db.save_snapshot(conn, datetime(2025, 2, 11), {"Alpha": 6, "Beta (retitled)": 32})
+
+    by_title = {paper["title"]: paper["changes"] for paper in analytics.papers(conn)}
+
+    assert by_title["Beta (retitled)"] == {"daily": 2, "monthly": 2, "yearly": 2}
+    assert by_title["Alpha"] == {"daily": 1, "monthly": 1, "yearly": 1}
+
+
 def test_paper_detail_growth_is_per_calendar_day(conn):
     """Snapshots are irregular, so growth must divide by elapsed days."""
     base = datetime(2025, 1, 1)

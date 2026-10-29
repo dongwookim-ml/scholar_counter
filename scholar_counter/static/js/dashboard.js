@@ -251,7 +251,8 @@
 
         rows.sort((a, b) => {
             if (sortKey === 'title') return a.title.localeCompare(b.title);
-            if (sortKey === 'change') return b.recent_change - a.recent_change;
+            // The API sorts by citations, and a stable sort keeps that order among ties.
+            if (GRANULARITIES.includes(sortKey)) return b.changes[sortKey] - a.changes[sortKey];
             return b.current_citations - a.current_citations;
         });
         return rows;
@@ -265,7 +266,7 @@
         if (!rows.length) {
             const tr = document.createElement('tr');
             const td = document.createElement('td');
-            td.colSpan = 5;
+            td.colSpan = 7;
             td.className = 'text-center text-body-secondary py-4';
             td.textContent = papers.length ? 'No papers match that filter.' : 'No data yet.';
             tr.appendChild(td);
@@ -284,9 +285,13 @@
             citations.className = 'text-end citation-count';
             citations.textContent = int(paper.current_citations);
 
-            const change = document.createElement('td');
-            change.className = `text-end fw-semibold ${changeClass(paper.recent_change)}`;
-            change.textContent = signed(paper.recent_change);
+            const changes = GRANULARITIES.map((period) => {
+                const cell = document.createElement('td');
+                const value = paper.changes[period];
+                cell.className = `text-end fw-semibold ${changeClass(value)}`;
+                cell.textContent = signed(value);
+                return cell;
+            });
 
             const trend = document.createElement('td');
             trend.appendChild(sparkline(paper.trend));
@@ -300,7 +305,7 @@
             button.addEventListener('click', () => showPaper(paper.title));
             actions.appendChild(button);
 
-            tr.append(title, citations, change, trend, actions);
+            tr.append(title, citations, ...changes, trend, actions);
             body.appendChild(tr);
         }
     }
