@@ -26,6 +26,30 @@ def _recent_total(changes: list[sqlite3.Row], days: int) -> int:
     return total
 
 
+def _bucket_changes(history: list[sqlite3.Row]) -> dict[str, int]:
+    """One paper's movement in its newest day, month and year.
+
+    Matches ``db.bucketed_totals``: the baseline is the last snapshot before the
+    newest bucket, so a gap counts towards the later bucket. A paper first seen
+    inside the newest bucket is measured from that first sighting, not from
+    zero, so a newly listed or retitled paper does not show its whole count.
+    """
+    from . import db
+
+    if not history:
+        return dict.fromkeys(db.GRANULARITIES, 0)
+
+    stamps = [datetime.fromisoformat(row["captured_at"]) for row in history]
+    changes = {}
+    for granularity, fmt in db.GRANULARITIES.items():
+        buckets = [stamp.strftime(fmt) for stamp in stamps]
+        # History is oldest first, so every other bucket is an earlier one.
+        earlier = [i for i, bucket in enumerate(buckets) if bucket != buckets[-1]]
+        baseline = history[earlier[-1]] if earlier else history[0]
+        changes[granularity] = history[-1]["citations"] - baseline["citations"]
+    return changes
+
+
 def summary(conn: sqlite3.Connection) -> dict[str, Any] | None:
     from . import db
 
@@ -88,6 +112,7 @@ def papers(conn: sqlite3.Connection) -> list[dict[str, Any]]:
                 "title": title,
                 "current_citations": citations,
                 "recent_change": recent_change,
+                "changes": _bucket_changes(history),
                 "trend": [
                     {"timestamp": _date(row["captured_at"]), "citations": row["citations"]}
                     for row in history

@@ -132,7 +132,9 @@
                                    placeholder="Filter titles…" aria-label="Filter papers" style="width: 12rem;">
                             <div class="btn-group btn-group-sm" role="group" aria-label="Sort papers">
                                 <button type="button" class="btn btn-outline-secondary active" data-sort="citations">Citations</button>
-                                <button type="button" class="btn btn-outline-secondary" data-sort="change">Change</button>
+                                <button type="button" class="btn btn-outline-secondary" data-sort="daily" title="Sort by change in the latest day">Δ Day</button>
+                                <button type="button" class="btn btn-outline-secondary" data-sort="monthly" title="Sort by change in the latest month">Δ Month</button>
+                                <button type="button" class="btn btn-outline-secondary" data-sort="yearly" title="Sort by change in the latest year">Δ Year</button>
                                 <button type="button" class="btn btn-outline-secondary" data-sort="title">Title</button>
                             </div>
                             <div class="btn-group btn-group-sm" role="group" aria-label="Export and analytics">
@@ -153,11 +155,17 @@
                             <table class="table table-hover align-middle mb-0" id="papers-table">
                                 <thead>
                                     <tr>
-                                        <th scope="col">Title</th>
-                                        <th scope="col" class="text-end">Citations</th>
-                                        <th scope="col" class="text-end">Change</th>
-                                        <th scope="col">Trend</th>
-                                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                                        <th scope="col" rowspan="2">Title</th>
+                                        <th scope="col" rowspan="2" class="text-end">Citations</th>
+                                        <th scope="col" colspan="3" class="text-center"
+                                            title="Measured from the last snapshot before the latest day, month or year">Change</th>
+                                        <th scope="col" rowspan="2">Trend</th>
+                                        <th scope="col" rowspan="2"><span class="visually-hidden">Actions</span></th>
+                                    </tr>
+                                    <tr>
+                                        <th scope="col" class="text-end">Day</th>
+                                        <th scope="col" class="text-end">Month</th>
+                                        <th scope="col" class="text-end">Year</th>
                                     </tr>
                                 </thead>
                                 <tbody id="papers-table-body"></tbody>

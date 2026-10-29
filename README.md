@@ -122,6 +122,13 @@ The trend chart groups snapshots into calendar buckets: `daily`, `monthly`, or
 bucket. A bucket with no snapshots is absent rather than zero, so a gap is
 visible instead of being drawn as a flat stretch.
 
+The papers table shows each paper's change over the newest day, month and year
+by the same rule. A paper first seen inside that bucket is measured from its
+first sighting, so a retitled entry does not count its old citations as new.
+The rows add up to the chart's latest bar only while the set of papers is
+stable: when Scholar merges or renames an entry, the chart, derived from
+totals, is the authoritative figure.
+
 ## API
 
 The Flask server exposes these; the static build writes each one to a file
