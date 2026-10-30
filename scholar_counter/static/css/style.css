@@ -136,6 +136,10 @@ body {
    a letter per line; the table scrolls inside .table-responsive instead. */
 #papers-table td.paper-title { min-width: 14rem; }
 
+/* The Actions header's .visually-hidden label is absolutely positioned. Unless
+   the scroller is its containing block, it escapes the clip and widens the page. */
+.table-responsive { position: relative; }
+
 .citation-count {
     font-weight: 600;
     font-variant-numeric: tabular-nums;

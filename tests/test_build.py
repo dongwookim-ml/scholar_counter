@@ -28,6 +28,7 @@ def test_writes_every_expected_file(site):
         "api/status.json",
         "api/trends/daily.json",
         "api/trends/monthly.json",
+        "api/trends/quarterly.json",
         "api/trends/yearly.json",
         "api/export/citations.csv",
         "api/export/papers.csv",
@@ -70,7 +71,7 @@ def test_generated_json_matches_the_live_api(site, settings, tmp_path):
 
 
 def test_every_granularity_is_generated(site):
-    for granularity in ("daily", "monthly", "yearly"):
+    for granularity in ("daily", "monthly", "quarterly", "yearly"):
         payload = json.loads((site / f"api/trends/{granularity}.json").read_text())
         assert payload["granularity"] == granularity
         assert payload["overall_trend"]

@@ -7,8 +7,9 @@ Everything now lives in a single database and aggregation happens in SQL.
 
 from __future__ import annotations
 
+import functools
 import sqlite3
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -48,6 +49,7 @@ def connect(database: Path) -> sqlite3.Connection:
     database.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(database, detect_types=0)
     conn.row_factory = sqlite3.Row
+    conn.create_function("bucket", 2, bucket, deterministic=True)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.executescript(SCHEMA)
@@ -124,12 +126,25 @@ def change_series(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
-# strftime patterns that collapse snapshots into calendar buckets.
-GRANULARITIES = {
-    "daily": "%Y-%m-%d",
-    "monthly": "%Y-%m",
-    "yearly": "%Y",
+# Calendar buckets that collapse snapshots, labelled so that the labels sort
+# chronologically as plain strings. strftime has no quarter, hence functions.
+GRANULARITIES: dict[str, Callable[[datetime], str]] = {
+    "daily": lambda moment: moment.strftime("%Y-%m-%d"),
+    "monthly": lambda moment: moment.strftime("%Y-%m"),
+    "quarterly": lambda moment: f"{moment.year}-Q{(moment.month - 1) // 3 + 1}",
+    "yearly": lambda moment: moment.strftime("%Y"),
 }
+
+
+@functools.cache
+def bucket(granularity: str, captured_at: str) -> str:
+    """The bucket a snapshot falls in: '2025-03-14', '2025-03', '2025-Q1', '2025'.
+
+    Registered as the SQL function ``bucket`` so the queries and the Python
+    analytics cannot disagree about where a quarter starts. Cached because
+    every paper's history repeats the same few hundred timestamps.
+    """
+    return GRANULARITIES[granularity](datetime.fromisoformat(captured_at))
 
 
 def bucketed_totals(conn: sqlite3.Connection, granularity: str) -> list[sqlite3.Row]:
@@ -138,23 +153,21 @@ def bucketed_totals(conn: sqlite3.Connection, granularity: str) -> list[sqlite3.
     Snapshots are irregular, so each bucket is represented by its *last*
     snapshot and the change is the movement since the previous bucket.
     """
-    try:
-        fmt = GRANULARITIES[granularity]
-    except KeyError:
+    if granularity not in GRANULARITIES:
         raise ValueError(
             f"Unknown granularity {granularity!r}; expected one of {sorted(GRANULARITIES)}"
-        ) from None
+        )
 
     return conn.execute(
         _TOTALS_CTE
         + """
         , ranked AS (
-            SELECT strftime(:fmt, captured_at) AS bucket,
+            SELECT bucket(:granularity, captured_at) AS bucket,
                    captured_at,
                    total,
                    papers,
                    ROW_NUMBER() OVER (
-                       PARTITION BY strftime(:fmt, captured_at)
+                       PARTITION BY bucket(:granularity, captured_at)
                        ORDER BY captured_at DESC
                    ) AS rank_in_bucket
             FROM totals
@@ -168,7 +181,7 @@ def bucketed_totals(conn: sqlite3.Connection, granularity: str) -> list[sqlite3.
         WHERE rank_in_bucket = 1
         ORDER BY bucket
         """,
-        {"fmt": fmt},
+        {"granularity": granularity},
     ).fetchall()
 
 

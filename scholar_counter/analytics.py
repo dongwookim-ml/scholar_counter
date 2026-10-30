@@ -27,7 +27,7 @@ def _recent_total(changes: list[sqlite3.Row], days: int) -> int:
 
 
 def _bucket_changes(history: list[sqlite3.Row]) -> dict[str, int]:
-    """One paper's movement in its newest day, month and year.
+    """One paper's movement in its newest day, month, quarter and year.
 
     Matches ``db.bucketed_totals``: the baseline is the last snapshot before the
     newest bucket, so a gap counts towards the later bucket. A paper first seen
@@ -39,10 +39,9 @@ def _bucket_changes(history: list[sqlite3.Row]) -> dict[str, int]:
     if not history:
         return dict.fromkeys(db.GRANULARITIES, 0)
 
-    stamps = [datetime.fromisoformat(row["captured_at"]) for row in history]
     changes = {}
-    for granularity, fmt in db.GRANULARITIES.items():
-        buckets = [stamp.strftime(fmt) for stamp in stamps]
+    for granularity in db.GRANULARITIES:
+        buckets = [db.bucket(granularity, row["captured_at"]) for row in history]
         # History is oldest first, so every other bucket is an earlier one.
         earlier = [i for i, bucket in enumerate(buckets) if bucket != buckets[-1]]
         baseline = history[earlier[-1]] if earlier else history[0]
