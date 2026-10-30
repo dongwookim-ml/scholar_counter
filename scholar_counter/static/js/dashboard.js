@@ -22,8 +22,13 @@
         trends: (g) => (IS_STATIC ? `${API}/trends/${g}.json` : `${API}/trends?granularity=${g}`),
     };
 
-    const GRANULARITIES = ['daily', 'monthly', 'yearly'];
-    const CHANGE_HEADING = { daily: 'Change per day', monthly: 'Change per month', yearly: 'Change per year' };
+    const GRANULARITIES = ['daily', 'monthly', 'quarterly', 'yearly'];
+    const CHANGE_HEADING = {
+        daily: 'Change per day',
+        monthly: 'Change per month',
+        quarterly: 'Change per quarter',
+        yearly: 'Change per year',
+    };
 
     let papers = [];
     let sortKey = 'citations';
@@ -124,7 +129,7 @@
                     borderWidth: 2,
                     fill: true,
                     tension: 0.35,
-                    // Sparse series (monthly, yearly) need visible markers.
+                    // Sparse series (monthly, quarterly, yearly) need visible markers.
                     pointRadius: points.length <= 24 ? 3 : 0,
                     pointHoverRadius: 5,
                 }],
@@ -266,7 +271,7 @@
         if (!rows.length) {
             const tr = document.createElement('tr');
             const td = document.createElement('td');
-            td.colSpan = 7;
+            td.colSpan = 8;
             td.className = 'text-center text-body-secondary py-4';
             td.textContent = papers.length ? 'No papers match that filter.' : 'No data yet.';
             tr.appendChild(td);

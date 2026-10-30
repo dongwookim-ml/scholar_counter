@@ -116,17 +116,18 @@ to `0.0.0.0` only on a trusted network, and never together with
 
 ## Chart granularity
 
-The trend chart groups snapshots into calendar buckets: `daily`, `monthly`, or
-`yearly`. Because scrapes are irregular, each bucket is represented by its
-*last* snapshot, and the change shown is the movement since the previous
-bucket. A bucket with no snapshots is absent rather than zero, so a gap is
-visible instead of being drawn as a flat stretch.
+The trend chart groups snapshots into calendar buckets: `daily`, `monthly`,
+`quarterly` (labelled like `2025-Q3`), or `yearly`. Because scrapes are
+irregular, each bucket is represented by its *last* snapshot, and the change
+shown is the movement since the previous bucket. A bucket with no snapshots is
+absent rather than zero, so a gap is visible instead of being drawn as a flat
+stretch.
 
-The papers table shows each paper's change over the newest day, month and year
-by the same rule. A paper first seen inside that bucket is measured from its
-first sighting, so a retitled entry does not count its old citations as new.
-The rows add up to the chart's latest bar only while the set of papers is
-stable: when Scholar merges or renames an entry, the chart, derived from
+The papers table shows each paper's change over the newest day, month, quarter
+and year by the same rule. A paper first seen inside that bucket is measured
+from its first sighting, so a retitled entry does not count its old citations
+as new. The rows add up to the chart's latest bar only while the set of papers
+is stable: when Scholar merges or renames an entry, the chart, derived from
 totals, is the authoritative figure.
 
 ## API

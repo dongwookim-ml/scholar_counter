@@ -51,18 +51,19 @@ def test_papers_sorted_by_citations_with_recent_change(seeded):
     assert len(papers[0]["trend"]) == 3
 
 
-def test_paper_changes_per_day_month_and_year(conn):
+def test_paper_changes_per_day_month_quarter_and_year(conn):
     db.save_snapshot(conn, datetime(2024, 12, 20), {"Alpha": 10})
-    db.save_snapshot(conn, datetime(2025, 1, 28), {"Alpha": 15})
-    db.save_snapshot(conn, datetime(2025, 2, 13), {"Alpha": 18})
-    db.save_snapshot(conn, datetime(2025, 2, 14, 9, 0), {"Alpha": 19})
-    db.save_snapshot(conn, datetime(2025, 2, 14, 18, 0), {"Alpha": 21})
+    db.save_snapshot(conn, datetime(2025, 3, 28), {"Alpha": 15})
+    db.save_snapshot(conn, datetime(2025, 4, 30), {"Alpha": 17})
+    db.save_snapshot(conn, datetime(2025, 5, 13), {"Alpha": 18})
+    db.save_snapshot(conn, datetime(2025, 5, 14, 9, 0), {"Alpha": 19})
+    db.save_snapshot(conn, datetime(2025, 5, 14, 18, 0), {"Alpha": 21})
 
     changes = analytics.papers(conn)[0]["changes"]
 
     # Each is measured from the last snapshot before the newest bucket, so the
     # morning scrape on the same day is not the daily baseline.
-    assert changes == {"daily": 3, "monthly": 6, "yearly": 11}
+    assert changes == {"daily": 3, "monthly": 4, "quarterly": 6, "yearly": 11}
 
 
 def test_paper_changes_match_the_bucketed_totals(conn):
@@ -73,7 +74,7 @@ def test_paper_changes_match_the_bucketed_totals(conn):
     db.save_snapshot(conn, base + timedelta(days=5), {"Alpha": 10, "Beta": 6})
 
     papers = analytics.papers(conn)
-    for granularity in ("daily", "monthly", "yearly"):
+    for granularity in db.GRANULARITIES:
         latest_bar = db.bucketed_totals(conn, granularity)[-1]["change"] or 0
         assert sum(paper["changes"][granularity] for paper in papers) == latest_bar
 
@@ -86,8 +87,8 @@ def test_paper_first_seen_in_the_newest_bucket_counts_from_first_sighting(conn):
 
     by_title = {paper["title"]: paper["changes"] for paper in analytics.papers(conn)}
 
-    assert by_title["Beta (retitled)"] == {"daily": 2, "monthly": 2, "yearly": 2}
-    assert by_title["Alpha"] == {"daily": 1, "monthly": 1, "yearly": 1}
+    assert by_title["Beta (retitled)"] == dict.fromkeys(db.GRANULARITIES, 2)
+    assert by_title["Alpha"] == dict.fromkeys(db.GRANULARITIES, 1)
 
 
 def test_paper_detail_growth_is_per_calendar_day(conn):
@@ -159,10 +160,28 @@ def test_yearly_granularity(conn):
     assert result["change_trend"] == [{"timestamp": "2025", "change": 60}]
 
 
+def test_quarterly_granularity_splits_on_calendar_quarters(conn):
+    db.save_snapshot(conn, datetime(2024, 12, 31), {"Alpha": 5})
+    db.save_snapshot(conn, datetime(2025, 3, 31, 23, 0), {"Alpha": 10})
+    db.save_snapshot(conn, datetime(2025, 4, 1, 1, 0), {"Alpha": 15})
+    db.save_snapshot(conn, datetime(2025, 6, 30), {"Alpha": 22})
+    db.save_snapshot(conn, datetime(2025, 10, 2), {"Alpha": 30})  # no Q3 snapshot
+
+    result = analytics.trends(conn, "quarterly")
+
+    assert [p["timestamp"] for p in result["overall_trend"]] == [
+        "2024-Q4",
+        "2025-Q1",
+        "2025-Q2",
+        "2025-Q4",
+    ]
+    assert [p["change"] for p in result["change_trend"]] == [5, 12, 8]
+
+
 def test_coarser_buckets_never_lose_the_final_total(seeded):
     """Whatever the bucket size, the newest point must match the latest total."""
     latest = analytics.summary(seeded)["current_total"]
-    for granularity in ("daily", "monthly", "yearly"):
+    for granularity in db.GRANULARITIES:
         points = analytics.trends(seeded, granularity)["overall_trend"]
         assert points[-1]["total_citations"] == latest
 
